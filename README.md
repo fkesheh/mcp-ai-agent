@@ -1,6 +1,6 @@
 # MCP AI Agent
 
-An AI agentic tool in TypeScript that can use MCP (Modular Co-processor) servers to provide enhanced functionality.
+An AI agentic tool in TypeScript that can use MCP (Modular Context Protocol) servers to provide enhanced functionality.
 
 ## Installation
 
@@ -10,9 +10,9 @@ npm install mcp-ai-agent
 
 ## Usage
 
-````typescript
-import { MCPAgent } from 'mcp-ai-agent';
-import { openai } from '@ai-sdk/openai';
+```typescript
+import { MCPAgent } from "mcp-ai-agent";
+import { openai } from "@ai-sdk/openai";
 
 // Create an MCPAgent with MCP server configuration
 const agent = new MCPAgent({
@@ -26,10 +26,10 @@ const agent = new MCPAgent({
 });
 
 async function run() {
-  // Initialize the agent (connects to all servers)
-  await agent.initialize();
-
   try {
+    // Initialize the agent (connects to all servers)
+    await agent.initialize();
+
     // Generate a response using sequential thinking
     const response = await agent.generateResponse(
       "Use sequential thinking to solve this math problem: 23 * 17",
@@ -47,6 +47,7 @@ async function run() {
 }
 
 run().catch(console.error);
+```
 
 ## API
 
@@ -58,7 +59,7 @@ The main class that manages connections to MCP servers and generates responses.
 
 ```typescript
 constructor(config: MCPAgentConfig)
-````
+```
 
 - `config` - Configuration object for the MCPAgent
 
