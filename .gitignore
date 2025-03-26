@@ -1,0 +1,4 @@
+_example.ts
+.env
+node_modules
+dist
