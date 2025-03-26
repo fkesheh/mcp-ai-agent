@@ -18,8 +18,8 @@ import { openai } from '@ai-sdk/openai';
 const agent = new MCPAgent({
   mcpServers: {
     "sequential-thinking": {
-      command: "path/to/node",
-      args: ["path/to/sequentialthinking/dist/index.js"],
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
     },
     // Add other MCP servers as needed
   },
