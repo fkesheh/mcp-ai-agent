@@ -11,7 +11,7 @@
     "README.md"
   ],
   "scripts": {
-    "test": "echo \"No tests yet\" && exit 0",
+    "test": "jest",
     "start": "npm run build",
     "build": "tsup",
     "prepublishOnly": "npm run build"
@@ -23,6 +23,9 @@
     "ai": "^4.2.5"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "tsup": "^8.0.1",
     "typescript": "^5.3.3"
