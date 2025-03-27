@@ -1,6 +1,6 @@
 {
   "name": "mcp-ai-agent",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "An AI agentic tool on typescript that can use MCP servers",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
