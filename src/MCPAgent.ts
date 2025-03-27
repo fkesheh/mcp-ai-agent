@@ -23,11 +23,7 @@ export class MCPAgent {
       await Promise.all(
         Object.entries(this.config.mcpServers).map(
           async ([name, serverConfig]) => {
-            const transport = new Experimental_StdioMCPTransport({
-              command: serverConfig.command,
-              args: serverConfig.args,
-              env: serverConfig.env,
-            });
+            const transport = new Experimental_StdioMCPTransport(serverConfig);
 
             this.clients[name] = await experimental_createMCPClient({
               transport,
@@ -55,21 +51,12 @@ export class MCPAgent {
         model,
         tools: this.tools,
         maxSteps,
-        messages: [
-          {
-            role: "user",
-            content: userMessage,
-          },
-        ],
+        prompt: userMessage,
       });
 
       // Check if there's actually text in the response
-      if (!response.text && response.steps) {
-        // If no text but there are steps (tool calls were made)
-        const lastStep = response.steps[response.steps.length - 1];
-        if (lastStep.finishReason === "tool-calls") {
-          return "The AI completed with tool calls, but no final text was generated. Check if the requested resources were found.";
-        }
+      if (!response.text && response.finishReason === "tool-calls") {
+        return "The AI completed with tool calls, but no final text was generated. Check if the requested resources were found.";
       }
 
       return response.text || "No response text was generated.";
