@@ -88,3 +88,5 @@ interface MCPServerConfig {
 ## License
 
 MIT
+
+just test
