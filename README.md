@@ -8,45 +8,33 @@ An AI agentic tool in TypeScript that can use MCP (Modular Context Protocol) ser
 npm install mcp-ai-agent
 ```
 
-## Usage
+For a complete example implementation, check out the [mcp-ai-agent-example](https://github.com/fkesheh/mcp-ai-agent-example) repository.
+
+## Minimal Example
+
+Here's the most basic way to use MCP Agent:
 
 ```typescript
 import { MCPAgent } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
-// Create an MCPAgent with MCP server configuration
 const agent = new MCPAgent({
   mcpServers: {
     "sequential-thinking": {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
     },
-    // Add other MCP servers as needed
   },
 });
 
-async function run() {
-  try {
-    // Initialize the agent (connects to all servers)
-    await agent.initialize();
-
-    // Generate a response using sequential thinking
-    const response = await agent.generateResponse(
-      "Use sequential thinking to solve this math problem: 23 * 17",
-      openai("gpt-4o"),
-      20 // maxSteps
-    );
-
-    console.log("Response:", response);
-  } catch (error) {
-    console.error("Error:", error);
-  } finally {
-    // Close the agent when done
-    await agent.close();
-  }
-}
-
-run().catch(console.error);
+// Initialize and use the agent
+await agent.initialize();
+const response = await agent.generateResponse(
+  "What is 25 * 25?",
+  openai("gpt-4o")
+);
+console.log(response);
+await agent.close();
 ```
 
 ## API
