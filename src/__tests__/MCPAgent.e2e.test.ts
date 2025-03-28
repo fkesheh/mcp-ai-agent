@@ -1,6 +1,6 @@
 import { MCPAgent } from "../MCPAgent.js";
 import { openai } from "@ai-sdk/openai";
-
+import fs from "fs";
 // Add Jest type declarations
 declare global {
   namespace jest {
@@ -47,15 +47,72 @@ describe("MCPAgent E2E", () => {
   });
 
   it("should initialize successfully and generate a response", async () => {
-    const response = await agent.generateResponse(
-      "Solve 23 * 37",
-      openai("gpt-4o-mini"),
-      10
-    );
+    const response = await agent.generateResponse({
+      prompt: "Solve 23 * 37",
+      model: openai("gpt-4o-mini"),
+    });
 
     expect(response).toBeDefined();
-    expect(typeof response).toBe("string");
-    expect(response.length).toBeGreaterThan(0);
-    expect(response).toContain("851");
+    expect(typeof response.text).toBe("string");
+    expect(response.text.length).toBeGreaterThan(0);
+    expect(response.text).toContain("851");
+  }, 60000);
+
+  it("should be able to send image messages", async () => {
+    const response = await agent.generateResponse({
+      model: openai("gpt-4o-mini"),
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Use sequential thinking to solve the following equation",
+            },
+            {
+              type: "image",
+              image: fs.readFileSync("./src/__tests__/equation.png"),
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(response).toBeDefined();
+    expect(typeof response.text).toBe("string");
+    expect(response.text.length).toBeGreaterThan(0);
+    const hasAnswer =
+      response.text.includes("x = -2") || response.text.includes("minus two");
+    expect(hasAnswer).toBe(true);
+  }, 60000);
+
+  it("should be able to send pdf messages", async () => {
+    const response = await agent.generateResponse({
+      model: openai("gpt-4o-mini"),
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Use sequential thinking to solve the following equation",
+            },
+            {
+              type: "file",
+              data: fs.readFileSync("./src/__tests__/equation.pdf"),
+              filename: "equation.pdf",
+              mimeType: "application/pdf",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(response).toBeDefined();
+    expect(typeof response.text).toBe("string");
+    expect(response.text.length).toBeGreaterThan(0);
+    const hasAnswer =
+      response.text.includes("x = -2") || response.text.includes("minus two");
+    expect(hasAnswer).toBe(true);
   }, 60000);
 });

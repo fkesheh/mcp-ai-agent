@@ -1,16 +1,18 @@
-import { experimental_createMCPClient, generateText } from "ai";
-import { Experimental_StdioMCPTransport } from "ai/mcp-stdio";
+import {
+  experimental_createMCPClient as createMCPClient,
+  generateText,
+  GenerateTextResult,
+} from "ai";
+import { Experimental_StdioMCPTransport as StdioMCPTransport } from "ai/mcp-stdio";
 import { openai } from "@ai-sdk/openai";
-
-interface MCPServerConfig {
-  command: string;
-  args: string[];
-  env?: Record<string, string>;
-}
-
-interface MCPConfig {
-  mcpServers: Record<string, MCPServerConfig>;
-}
+import {
+  MCPConfig,
+  TOOLS,
+  GenerateTextArgs,
+  StdioConfig,
+  SSEConfig,
+} from "./types.js";
+import { filterTools } from "./utils.js";
 
 export class MCPAgent {
   private clients: Record<string, any> = {};
@@ -23,12 +25,25 @@ export class MCPAgent {
       await Promise.all(
         Object.entries(this.config.mcpServers).map(
           async ([name, serverConfig]) => {
-            const transport = new Experimental_StdioMCPTransport(serverConfig);
+            const type = "type" in serverConfig ? serverConfig.type : "stdio";
+            switch (type) {
+              case "stdio":
+                const transport = new StdioMCPTransport(
+                  serverConfig as StdioConfig
+                );
 
-            this.clients[name] = await experimental_createMCPClient({
-              transport,
-            });
-
+                this.clients[name] = await createMCPClient({
+                  transport,
+                });
+                break;
+              case "sse":
+                this.clients[name] = await createMCPClient({
+                  transport: serverConfig as SSEConfig,
+                });
+                break;
+              default:
+                throw new Error(`Unsupported server type for server ${name}`);
+            }
             const serverTools = await this.clients[name].tools();
             this.tools = { ...this.tools, ...serverTools };
           }
@@ -42,24 +57,27 @@ export class MCPAgent {
   }
 
   async generateResponse(
-    userMessage: string,
-    model = openai("gpt-4o"),
-    maxSteps = 20
-  ): Promise<string> {
+    args: GenerateTextArgs
+  ): Promise<GenerateTextResult<TOOLS, any>> {
+    const filteredTools = filterTools(this.tools, args.filterMCPTools);
+    const allTools = { ...filteredTools, ...args.tools };
+
     try {
       const response = await generateText({
-        model,
-        tools: this.tools,
-        maxSteps,
-        prompt: userMessage,
+        ...args,
+        model: args.model || openai("gpt-4o"),
+        tools: allTools,
+        maxSteps: args.maxSteps || 20,
       });
 
-      // Check if there's actually text in the response
+      const finalResponse = { ...response };
+
       if (!response.text && response.finishReason === "tool-calls") {
-        return "The AI completed with tool calls, but no final text was generated. Check if the requested resources were found.";
+        finalResponse.text =
+          "The AI completed with tool calls, but no final text was generated. Check if the requested resources were found.";
       }
 
-      return response.text || "No response text was generated.";
+      return finalResponse;
     } catch (error) {
       console.error("Error generating response:", error);
       throw error;
