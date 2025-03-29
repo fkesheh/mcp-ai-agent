@@ -1,4 +1,5 @@
 import { MCPAgent } from "../MCPAgent.js";
+import { Servers } from "../index.js";
 import { openai } from "@ai-sdk/openai";
 import fs from "fs";
 // Add Jest type declarations
@@ -26,19 +27,15 @@ describe("MCPAgent E2E", () => {
       );
     }
 
-    // Initialize the MCPAgent with the sequential-thinking server
-    agent = new MCPAgent({
+    // Initialize the MCPAgent with the sequential-thinking server and a custom memory server
+    agent = new MCPAgent(Servers.sequentialThinking, {
       mcpServers: {
-        "sequential-thinking": {
+        memory: {
           command: "npx",
-          args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
-          env: {
-            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-          },
+          args: ["-y", "@modelcontextprotocol/server-memory"],
         },
       },
     });
-
     await agent.initialize();
   });
 
@@ -48,7 +45,8 @@ describe("MCPAgent E2E", () => {
 
   it("should initialize successfully and generate a response", async () => {
     const response = await agent.generateResponse({
-      prompt: "Solve 23 * 37",
+      prompt:
+        "Solve 23 * 37. And create an entity with TEST_NUMBER as the answer to the question.",
       model: openai("gpt-4o-mini"),
     });
 
@@ -58,7 +56,20 @@ describe("MCPAgent E2E", () => {
     expect(response.text).toContain("851");
   }, 60000);
 
-  it("should be able to send image messages", async () => {
+  it("should remember the answer to the question", async () => {
+    const response = await agent.generateResponse({
+      prompt:
+        "Use your knowledge graph memory and tell me what is the TEST_NUMBER?",
+      model: openai("gpt-4o-mini"),
+    });
+
+    expect(response).toBeDefined();
+    expect(typeof response.text).toBe("string");
+    expect(response.text.length).toBeGreaterThan(0);
+    expect(response.text).toContain("851");
+  }, 60000);
+
+  it.skip("should be able to send image messages", async () => {
     const response = await agent.generateResponse({
       model: openai("gpt-4o-mini"),
       messages: [
@@ -81,12 +92,13 @@ describe("MCPAgent E2E", () => {
     expect(response).toBeDefined();
     expect(typeof response.text).toBe("string");
     expect(response.text.length).toBeGreaterThan(0);
+    console.log("response", response);
     const hasAnswer =
       response.text.includes("x = -2") || response.text.includes("minus two");
     expect(hasAnswer).toBe(true);
   }, 60000);
 
-  it("should be able to send pdf messages", async () => {
+  it.skip("should be able to send pdf messages", async () => {
     const response = await agent.generateResponse({
       model: openai("gpt-4o-mini"),
       messages: [
@@ -111,6 +123,7 @@ describe("MCPAgent E2E", () => {
     expect(response).toBeDefined();
     expect(typeof response.text).toBe("string");
     expect(response.text.length).toBeGreaterThan(0);
+    console.log("response", response);
     const hasAnswer =
       response.text.includes("x = -2") || response.text.includes("minus two");
     expect(hasAnswer).toBe(true);

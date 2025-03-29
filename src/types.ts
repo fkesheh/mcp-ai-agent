@@ -140,7 +140,7 @@ export interface MCPConfig {
   /**
    * Map of server names to their configurations
    */
-  mcpServers: Record<string, MCPServerConfig>;
+  mcpServers: Record<string, MCPServerConfig | MCPAutoConfig>;
 }
 
 /**
@@ -201,4 +201,43 @@ export interface GenerateTextArgs {
    * @returns Boolean indicating whether to include the tool
    */
   filterMCPTools?: (tool: TOOLS) => boolean;
+}
+
+export interface MCPAutoConfig {
+  type: "auto";
+
+  /**
+   * The name of the MCP server
+   */
+  name: string;
+
+  /**
+   * The description of the MCP server
+   */
+  description: string;
+
+  /**
+   * Optional GitHub repository URL for the MCP server
+   */
+  gitHubRepo?: string;
+
+  /**
+   * The license of the MCP server
+   */
+  license?: string;
+
+  /**
+   * The description of the MCP server
+   */
+  toolsDescription: Record<string, string>;
+
+  /**
+   * The parameters of the MCP server
+   */
+  parameters: Record<string, { description: string; required: boolean }>;
+
+  /**
+   * The configuration for the MCP server
+   */
+  mcpConfig: MCPServerConfig | MCPServerConfig[];
 }
