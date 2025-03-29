@@ -18,7 +18,7 @@ export const braveSearch: MCPAutoConfig = {
   gitHubRepo: "https://github.com/modelcontextprotocol/servers",
   license: "MIT",
   parameters: {
-    BRAVE_SEARCH_API_KEY: {
+    BRAVE_API_KEY: {
       description: "API key for Brave Search API",
       required: true,
     },
