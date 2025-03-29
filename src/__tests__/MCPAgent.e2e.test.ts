@@ -28,7 +28,7 @@ describe("MCPAgent E2E", () => {
     }
 
     // Initialize the MCPAgent with the sequential-thinking server and a custom memory server
-    agent = new MCPAgent(Servers.sequentialThinking, {
+    agent = new MCPAgent(Servers.sequentialThinking, Servers.braveSearch, {
       mcpServers: {
         memory: {
           command: "npx",
@@ -54,6 +54,18 @@ describe("MCPAgent E2E", () => {
     expect(typeof response.text).toBe("string");
     expect(response.text.length).toBeGreaterThan(0);
     expect(response.text).toContain("851");
+  }, 60000);
+
+  it("should search the web successfully and generate a response", async () => {
+    const response = await agent.generateResponse({
+      prompt: "What is the lastest bitcoin price?",
+      model: openai("gpt-4o-mini"),
+    });
+
+    expect(response).toBeDefined();
+    expect(typeof response.text).toBe("string");
+    expect(response.text.length).toBeGreaterThan(0);
+    console.log("response", response.text);
   }, 60000);
 
   it("should remember the answer to the question", async () => {
