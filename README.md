@@ -179,39 +179,6 @@ await agent.initialize();
 // Use the agent as shown in the previous example
 ```
 
-### Using Auto Configuration
-
-You can use auto-configuration for servers that support it:
-
-```typescript
-import { MCPAgent } from "mcp-ai-agent";
-import { openai } from "@ai-sdk/openai";
-
-const agent = new MCPAgent({
-  mcpServers: {
-    "custom-server": {
-      type: "auto",
-      name: "custom-server",
-      description: "A custom MCP server",
-      toolsDescription: {
-        tool1: "Description of tool1",
-        tool2: "Description of tool2",
-      },
-      parameters: {
-        API_KEY: { description: "API key for the service", required: true },
-      },
-      mcpConfig: {
-        command: "npx",
-        args: ["-y", "@your-custom-server-package"],
-      },
-    },
-  },
-});
-
-await agent.initialize();
-// Use the agent as shown in the previous example
-```
-
 ## Advanced Examples
 
 ### Working with Images
