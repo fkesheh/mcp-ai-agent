@@ -51,6 +51,14 @@ export class MCPAgent {
       );
     }
 
+    const envVars = Object.entries(autoConfig.parameters).reduce(
+      (acc: Record<string, string | undefined>, [key, value]) => {
+        if (process.env[key]) acc[key] = process.env[key];
+        return acc;
+      },
+      {}
+    );
+
     const serverConfig = Array.isArray(autoConfig.mcpConfig)
       ? autoConfig.mcpConfig[0]
       : autoConfig.mcpConfig;
@@ -58,7 +66,10 @@ export class MCPAgent {
     const type = "type" in serverConfig ? serverConfig.type : "stdio";
     switch (type) {
       case "stdio":
-        await this.initializeSdtioServer(name, serverConfig as StdioConfig);
+        await this.initializeSdtioServer(name, {
+          ...serverConfig,
+          env: envVars,
+        } as StdioConfig);
         break;
       case "sse":
         await this.initializeSSEServer(name, serverConfig as SSEConfig);

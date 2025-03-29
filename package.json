@@ -14,7 +14,10 @@
     "test": "jest",
     "start": "npm run build",
     "build": "tsup",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "patch": "npm version patch && npm publish",
+    "minor": "npm version minor && npm publish",
+    "major": "npm version major && npm publish"
   },
   "author": "Foad Kesheh <foad@fmktech.com.br>",
   "license": "MIT",
