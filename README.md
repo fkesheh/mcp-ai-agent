@@ -10,13 +10,16 @@ A TypeScript library that enables AI agents to leverage MCP (Model Context Proto
 - Filter and combine MCP tools with custom tools
 - Preconfigured servers for easy initialization
 - Auto-configuration support for simplified setup
+- Agents can call other agents for specific tasks
+- Agent composition - create specialized agents and combine them
+- Named agents with descriptions for improved identification
+- Auto-initialization of agents (no need to call initialize explicitly)
 
 ## Roadmap
 
 - [x] Basic agent with MCP tools integration
 - [x] Auto handled MCP servers
-- [ ] MCP auto discovery (?)
-- [ ] Multi-agent workflows
+- [x] Multi-agent workflows
 - [ ] Automatic Swagger/OpenAPI to tools conversion (stateless servers simple integration)
 - [ ] API Server implementation (call your agent on a server)
 - [ ] Observabilty system
@@ -38,16 +41,88 @@ import { MCPAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
 // Use a preconfigured server
-const agent = new MCPAgent(Servers.sequentialThinking);
+const agent = new MCPAgent(
+  "Sequential Thinking Agent", // Name
+  "This agent can be used to solve complex tasks", // Description
+  Servers.sequentialThinking
+);
 
 // Initialize and use the agent
-await agent.initialize();
 const response = await agent.generateResponse({
   prompt: "What is 25 * 25?",
   model: openai("gpt-4o-mini"),
 });
 console.log(response.text);
-await agent.close();
+```
+
+### Multi-Agent Workflows (Agent Composition)
+
+You can create specialized agents and compose them into a master agent that can delegate tasks:
+
+```typescript
+import { MCPAgent, Servers } from "mcp-ai-agent";
+import { openai } from "@ai-sdk/openai";
+
+// Create specialized agents for different tasks
+const sequentialThinkingAgent = new MCPAgent(
+  "Sequential Thinker",
+  "Use this agent to think sequentially and resolve complex problems",
+  Servers.sequentialThinking
+);
+
+const braveSearchAgent = new MCPAgent(
+  "Brave Search",
+  "Use this agent to search the web for the latest information",
+  Servers.braveSearch
+);
+
+const memoryAgent = new MCPAgent(
+  "Memory Agent",
+  "Use this agent to store and retrieve memories",
+  {
+    mcpServers: {
+      memory: {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+      },
+    },
+  }
+);
+
+// Create a master agent that can use all specialized agents
+const masterAgent = new MCPAgent(
+  "Master Agent",
+  "An agent that can manage and delegate to specialized agents",
+  // Include the specialized agents as sub-agents
+  {
+    type: "agent",
+    agent: sequentialThinkingAgent,
+  },
+  {
+    type: "agent",
+    agent: memoryAgent,
+  },
+  {
+    type: "agent",
+    agent: braveSearchAgent,
+  }
+);
+
+// Initialize and use the master agent
+const response = await masterAgent.generateResponse({
+  prompt: "What is the latest Bitcoin price? Store the answer in memory.",
+  model: openai("gpt-4o"),
+});
+
+console.log(response.text);
+
+// You can ask the memory agent about information stored by the master agent
+const memoryResponse = await masterAgent.generateResponse({
+  prompt: "What information have we stored about Bitcoin price?",
+  model: openai("gpt-4o"),
+});
+
+console.log(memoryResponse.text);
 ```
 
 ## Supported MCP Servers
@@ -71,10 +146,16 @@ You can easily use any supported server by importing it from the `Servers` names
 import { MCPAgent, Servers } from "mcp-ai-agent";
 
 // Use single server
-const agent1 = new MCPAgent(Servers.sequentialThinking);
+const agent1 = new MCPAgent(
+  "Sequential Thinking Agent",
+  "Agent for sequential thinking",
+  Servers.sequentialThinking
+);
 
 // Combine multiple servers
 const agent2 = new MCPAgent(
+  "Multi-Tool Agent",
+  "Agent with multiple capabilities",
   Servers.sequentialThinking,
   Servers.memory,
   Servers.braveSearch
@@ -126,13 +207,18 @@ import { openai } from "@ai-sdk/openai";
 
 // Combine multiple preconfigured servers
 const agent = new MCPAgent(
+  "Multi-Capability Agent",
+  "An agent with multiple specialized capabilities",
   Servers.sequentialThinking,
   Servers.memory,
   Servers.fetch
 );
 
-await agent.initialize();
-// Use the agent as shown in the previous example
+const response = await agent.generateResponse({
+  prompt: "What is 25 * 25?",
+  model: openai("gpt-4o-mini"),
+});
+console.log(response.text);
 ```
 
 ### Using Stdio Tools Manually
@@ -141,18 +227,24 @@ await agent.initialize();
 import { MCPAgent } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
-const agent = new MCPAgent({
-  mcpServers: {
-    "sequential-thinking": {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+const agent = new MCPAgent(
+  "Custom Server Agent",
+  "Agent using a manually configured sequential thinking server",
+  {
+    mcpServers: {
+      "sequential-thinking": {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      },
     },
-  },
-});
+  }
+);
 
-// Initialize and use the agent
-await agent.initialize();
-// Use the agent as shown in the previous example
+const response = await agent.generateResponse({
+  prompt: "What is 25 * 25?",
+  model: openai("gpt-4o-mini"),
+});
+console.log(response.text);
 ```
 
 ### Using SSE Transport
@@ -163,20 +255,27 @@ You can also use Server-Sent Events (SSE) transport for connecting to MCP server
 import { MCPAgent } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
-const agent = new MCPAgent({
-  mcpServers: {
-    "sequential-thinking": {
-      type: "sse",
-      url: "https://your-mcp-server.com/sequential-thinking",
-      headers: {
-        "x-api-key": "your-api-key",
+const agent = new MCPAgent(
+  "SSE Transport Agent",
+  "Agent using SSE transport for remote server connection",
+  {
+    mcpServers: {
+      "sequential-thinking": {
+        type: "sse",
+        url: "https://your-mcp-server.com/sequential-thinking",
+        headers: {
+          "x-api-key": "your-api-key",
+        },
       },
     },
-  },
-});
+  }
+);
 
-await agent.initialize();
-// Use the agent as shown in the previous example
+const response = await agent.generateResponse({
+  prompt: "What is 25 * 25?",
+  model: openai("gpt-4o-mini"),
+});
+console.log(response.text);
 ```
 
 ## Advanced Examples
@@ -190,9 +289,12 @@ import { MCPAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 import fs from "fs";
 
-const agent = new MCPAgent(Servers.sequentialThinking);
+const agent = new MCPAgent(
+  "Image Processing Agent",
+  "Agent capable of processing images",
+  Servers.sequentialThinking
+);
 
-await agent.initialize();
 const response = await agent.generateResponse({
   model: openai("gpt-4o-mini"),
   messages: [
@@ -224,9 +326,12 @@ import { MCPAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 import fs from "fs";
 
-const agent = new MCPAgent(Servers.sequentialThinking);
+const agent = new MCPAgent(
+  "PDF Processing Agent",
+  "Agent capable of processing PDF documents",
+  Servers.sequentialThinking
+);
 
-await agent.initialize();
 const response = await agent.generateResponse({
   model: openai("gpt-4o-mini"),
   messages: [
@@ -261,6 +366,8 @@ import { openai } from "@ai-sdk/openai";
 
 // Create an agent with both preconfigured and custom servers
 const agent = new MCPAgent(
+  "Hybrid Configuration Agent",
+  "Agent that combines preconfigured and custom server configurations",
   // Use a preconfigured server from the Servers namespace
   Servers.sequentialThinking,
 
@@ -282,9 +389,6 @@ const agent = new MCPAgent(
   Servers.memory
 );
 
-await agent.initialize();
-
-// Now you can use tools from both the preconfigured and custom servers
 const response = await agent.generateResponse({
   prompt:
     "Search for information about AI agents and store the results in memory",
@@ -342,11 +446,13 @@ const customVectorDB: MCPAutoConfig = {
 };
 
 // Create an agent with the custom server and a preconfigured server
-const agent = new MCPAgent(customVectorDB, Servers.sequentialThinking);
+const agent = new MCPAgent(
+  "Vector DB Agent",
+  "Agent with vector database capabilities",
+  customVectorDB,
+  Servers.sequentialThinking
+);
 
-await agent.initialize();
-
-// Use the tools from both servers
 const response = await agent.generateResponse({
   prompt:
     "Use sequential thinking to analyze this document and store it in the vector database",
@@ -376,14 +482,16 @@ await agent.close();
 
 ## Configuration
 
-The `MCPAgent` constructor accepts multiple configuration objects:
+The `MCPAgent` constructor accepts a name, description, and multiple configuration objects:
 
 ```typescript
 /**
- * Create a new MCPAgent with one or more configurations
- * @param configs - Configuration objects for various MCP servers
+ * Create a new MCPAgent with a name, description, and one or more configurations
+ * @param name - The name of the agent
+ * @param description - A description of the agent's capabilities
+ * @param configs - Configuration objects for various MCP servers and sub-agents
  */
-constructor(...configs: (MCPAutoConfig | MCPConfig)[])
+constructor(name: string, description: string, ...configs: WorkflowConfig[])
 ```
 
 ### Auto Configuration

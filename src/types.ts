@@ -241,3 +241,72 @@ export interface MCPAutoConfig {
    */
   mcpConfig: MCPServerConfig | MCPServerConfig[];
 }
+
+export interface AIAgent {
+  /**
+   * Initializes the agent's resources and tools
+   */
+  initialize(): Promise<void>;
+
+  /**
+   * Generates a response using the agent's capabilities
+   * @param args Configuration for text generation
+   */
+  generateResponse(
+    args: GenerateTextArgs
+  ): Promise<GenerateTextResult<TOOLS, any>>;
+
+  /**
+   * Cleans up and closes all resources used by the agent
+   */
+  close(): Promise<void>;
+
+  /**
+   * Returns information about the agent
+   */
+  getInfo?(): {
+    name: string;
+    description: string;
+    tools: string[];
+    agents?: string[];
+  };
+}
+
+export interface AgentConfig {
+  /**
+   * Type identifier for agent configuration
+   */
+  type: "agent";
+
+  /**
+   * Optional name of the agent for reference (override the agent name)
+   */
+  name?: string;
+
+  /**
+   * Description of the agent's purpose and capabilities (override the agent description)
+   */
+  description?: string;
+
+  /**
+   * The agent instance to be used
+   */
+  agent: AIAgent;
+
+  /**
+   * Optional prompt to guide the agent's behavior
+   */
+  prompt?: string;
+
+  /**
+   * Optional system message to guide the agent's behavior
+   */
+  systemMessage?: string;
+
+  /**
+   * Optional model to use for this specific agent
+   */
+  model?: LanguageModel;
+}
+
+export type WorkflowConfig = MCPConfig | MCPAutoConfig | AgentConfig;
