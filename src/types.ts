@@ -1,15 +1,18 @@
 // Types for the MCPAgent library
 import {
   CoreMessage,
+  GenerateObjectResult,
   GenerateTextOnStepFinishCallback,
   GenerateTextResult,
   LanguageModel,
   Message,
   ProviderMetadata,
+  Schema,
   ToolChoice,
 } from "ai";
 
 import Stream from "node:stream";
+import { z } from "zod";
 
 /**
  * Full configuration for MCPAgent
@@ -203,6 +206,41 @@ export interface GenerateTextArgs {
   filterMCPTools?: (tool: TOOLS) => boolean;
 }
 
+export interface GenerateObjectArgs<OBJECT> extends GenerateTextArgs {
+  output?: "object" | undefined;
+
+  /**
+  The schema of the object that the model should generate.
+   */
+  schema: z.Schema<OBJECT, z.ZodTypeDef, any> | Schema<OBJECT>;
+  /**
+  Optional name of the output that should be generated.
+  Used by some providers for additional LLM guidance, e.g.
+  via tool or schema name.
+   */
+  schemaName?: string;
+  /**
+  Optional description of the output that should be generated.
+  Used by some providers for additional LLM guidance, e.g.
+  via tool or schema description.
+   */
+  schemaDescription?: string;
+  /** 
+  The mode to use for object generation.
+
+  The schema is converted into a JSON schema and used in one of the following ways
+
+  - 'auto': The provider will choose the best mode for the model.
+  - 'tool': A tool with the JSON schema as parameters is provided and the provider is instructed to use it.
+  - 'json': The JSON schema and an instruction are injected into the prompt. If the provider supports JSON mode, it is enabled. If the provider supports JSON grammars, the grammar is used.
+
+  Please note that most providers do not support all modes.
+
+  Default and recommended: 'auto' (best mode for the model).
+   */
+  mode?: "auto" | "json" | "tool";
+}
+
 export interface MCPAutoConfig {
   type: "auto";
 
@@ -242,7 +280,7 @@ export interface MCPAutoConfig {
   mcpConfig: MCPServerConfig | MCPServerConfig[];
 }
 
-export interface AIAgent {
+export interface AIAgentInterface {
   /**
    * Initializes the agent's resources and tools
    */
@@ -255,6 +293,21 @@ export interface AIAgent {
   generateResponse(
     args: GenerateTextArgs
   ): Promise<GenerateTextResult<TOOLS, any>>;
+
+  /**
+   * Generates an object using the agent's capabilities
+   * @param args Configuration for object generation
+   */
+  generateObject<OBJECT>(args: GenerateObjectArgs<OBJECT>): Promise<{
+    object: OBJECT;
+    textGenerationResult: GenerateTextResult<TOOLS, any>;
+    objectGenerationResult: GenerateObjectResult<OBJECT>;
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+  }>;
 
   /**
    * Cleans up and closes all resources used by the agent
@@ -291,22 +344,56 @@ export interface AgentConfig {
   /**
    * The agent instance to be used
    */
-  agent: AIAgent;
-
-  /**
-   * Optional prompt to guide the agent's behavior
-   */
-  prompt?: string;
-
-  /**
-   * Optional system message to guide the agent's behavior
-   */
-  systemMessage?: string;
+  agent: AIAgentInterface;
 
   /**
    * Optional model to use for this specific agent
    */
   model?: LanguageModel;
+
+  /**
+   * Tools to make available to the model
+   */
+  tools?: TOOLS;
+
+  /**
+   * Tool selection configuration
+   */
+  toolChoice?: ToolChoice<TOOLS>;
+
+  /**
+   * Maximum number of steps to execute
+   */
+  maxSteps?: number;
+
+  /**
+   * System message to include in the prompt
+   * Can be used with `prompt` or `messages`
+   */
+  system?: string;
+
+  /**
+   * A list of messages
+   * You can either use `prompt` or `messages` but not both
+   */
+  messages?: Array<CoreMessage> | Array<Omit<Message, "id">>;
+
+  /**
+   * Provider-specific options
+   */
+  providerOptions?: ProviderMetadata;
+
+  /**
+   * Callback function that is called when a step finishes
+   */
+  onStepFinish?: GenerateTextOnStepFinishCallback<TOOLS>;
+
+  /**
+   * Function to filter which MCP tools should be available
+   * @param tool The tool to evaluate
+   * @returns Boolean indicating whether to include the tool
+   */
+  filterMCPTools?: (tool: TOOLS) => boolean;
 }
 
 export type WorkflowConfig = MCPConfig | MCPAutoConfig | AgentConfig;

@@ -1,10 +1,12 @@
 // Main library entry point
-export { MCPAgent } from "./MCPAgent.js";
+export { AIAgent } from "./AIAgent.js";
+
 export type {
-  MCPAgentConfig,
+  AgentConfig,
   MCPServerConfig,
   MCPTool,
   MCPResponse,
   ToolSet,
+  AIAgentInterface,
 } from "./types.js";
 export * as Servers from "./servers/index.js";

@@ -125,6 +125,120 @@ const memoryResponse = await masterAgent.generateResponse({
 console.log(memoryResponse.text);
 ```
 
+## Crew AI style workflow
+
+The MCP AI Agent can be used to create a crew of specialized agents that work together to accomplish complex tasks, similar to the Crew AI pattern. Here's an example of setting up a project management workflow with multiple specialized agents:
+
+```typescript
+import { AIAgent } from "mcp-ai-agent";
+import { Servers } from "mcp-ai-agent";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
+
+// Initialize specialized agents for project management
+const projectPlannerAgent = new AIAgent({
+  name: "Project Planner",
+  system:
+    "Responsible for breaking down projects into actionable tasks, setting timelines, and identifying dependencies",
+  toolsConfigs: [Servers.sequentialThinking],
+});
+
+const estimationAgent = new AIAgent({
+  name: "Project Estimator",
+  system:
+    "Provides accurate time, resource, and effort estimations for project tasks",
+  toolsConfigs: [Servers.sequentialThinking],
+});
+
+const resourceAllocatorAgent = new AIAgent({
+  name: "Resource Allocator",
+  system:
+    "Allocates resources to project tasks based on skills, availability, and workload",
+  toolsConfigs: [Servers.sequentialThinking],
+});
+
+// Define project details
+const projectDetails = {
+  project: "Website",
+  industry: "Technology",
+  project_objectives: "Create a website for a small business",
+  team_members: [
+    "John Doe (Project Manager)",
+    "Jane Doe (Software Engineer)",
+    "Bob Smith (Designer)",
+    "Alice Johnson (QA Engineer)",
+  ],
+  project_requirements: [
+    "Responsive design for desktop and mobile",
+    "Modern user interface",
+    "User-friendly navigation",
+    "About Us page",
+    "Services page",
+    "Contact page with form",
+  ],
+};
+
+const tasks = {
+  projectPlanTask: (projectDetails: typeof projectDetails) => `Create a detailed project plan for ${
+      projectDetails.project
+    } based on these requirements: ${projectDetails.project_requirements.join(
+      ", "
+    )}`,
+  estimateTask: (projectPlan: string) => `Estimate time and resources for this project plan: ${projectPlan}`,
+  allocationTask: (projectDetails: typeof projectDetails, estimations: string) =>
+      `Allocate team members to tasks based on this estimation: ${
+      estimations
+    }. Team: ${projectDetails.team_members.join(", ")}`,
+}
+
+// Define schema for resource allocation
+const projectPlanSchema = z.object({
+  tasks: z.array(
+    z.object({
+      task_name: z.string().describe("Name of the task"),
+      estimated_time_hours: z.number().describe("Estimated time in hours"),
+      required_resources: z.array(z.string()).describe("Required resources"),
+    })
+  ),
+  milestones: z.array(
+    z.object({
+      milestone_name: z.string().describe("Name of the milestone"),
+      tasks: z.array(z.string()).describe("Tasks for this milestone"),
+    })
+  ),
+});
+
+// Execute the workflow
+async function runProjectWorkflow() {
+  // Step 1: Create project plan
+  const projectPlan = await projectPlannerAgent.generateResponse({
+    prompt: tasks.projectPlanTask(projectDetails)
+    model: openai("gpt-4o-mini"),
+  });
+
+  // Step 2: Estimate project tasks
+  const estimations = await estimationAgent.generateResponse({
+    prompt: `Estimate time and resources for this project plan: ${projectPlan.text}`,
+    model: openai("gpt-4o-mini"),
+  });
+
+  // Step 3: Allocate resources
+  const resourceAllocation = await resourceAllocatorAgent.generateObject({
+    prompt: `Allocate team members to tasks based on this estimation: ${
+      estimations.text
+    }. Team: ${projectDetails.team_members.join(", ")}`,
+    model: openai("gpt-4o-mini"),
+    schema: projectPlanSchema,
+  });
+
+  return {
+    projectPlan: projectPlan.text,
+    estimations: estimations.text,
+    resourceAllocation: resourceAllocation.object,
+  };
+}
+```
+
 ## Supported MCP Servers
 
 MCP AI Agent comes with preconfigured support for the following servers:

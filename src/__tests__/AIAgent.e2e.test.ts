@@ -1,7 +1,8 @@
-import { MCPAgent } from "../MCPAgent.js";
+import { AIAgent } from "../AIAgent.js";
 import { Servers } from "../index.js";
 import { openai } from "@ai-sdk/openai";
 import fs from "fs";
+import { AIAgentInterface } from "../types.js";
 // Add Jest type declarations
 declare global {
   namespace jest {
@@ -16,11 +17,11 @@ declare global {
   }
 }
 
-describe("MCPAgent E2E", () => {
-  let sequentialThinkingAgent: MCPAgent;
-  let memoryAgent: MCPAgent;
-  let masterAgent: MCPAgent;
-  let braveSearchAgent: MCPAgent;
+describe("Agent E2E", () => {
+  let sequentialThinkingAgent: AIAgentInterface;
+  let memoryAgent: AIAgentInterface;
+  let masterAgent: AIAgentInterface;
+  let braveSearchAgent: AIAgentInterface;
 
   beforeAll(async () => {
     // Check for required environment variables
@@ -31,50 +32,60 @@ describe("MCPAgent E2E", () => {
     }
 
     // The sequential thinking agent
-    sequentialThinkingAgent = new MCPAgent(
-      "Sequential Thinker",
-      "Use this agent to think sequentially and resolve complex problems",
-      Servers.sequentialThinking
-    );
+    sequentialThinkingAgent = new AIAgent({
+      name: "Sequential Thinker",
+      description:
+        "Use this agent to think sequentially and resolve complex problems",
+      toolsConfigs: [Servers.sequentialThinking],
+    });
 
     // The brave search agent
-    braveSearchAgent = new MCPAgent(
-      "Brave Search",
-      "Use this agent to search the web for the latest information",
-      Servers.braveSearch
-    );
+    braveSearchAgent = new AIAgent({
+      name: "Brave Search",
+      description:
+        "Use this agent to search the web for the latest information",
+      toolsConfigs: [Servers.braveSearch],
+    });
 
     // The memory agent
-    memoryAgent = new MCPAgent(
-      "Memory Agent",
-      "Use this agent to store and retrieve memories",
-      {
-        mcpServers: {
-          memory: {
-            command: "npx",
-            args: ["-y", "@modelcontextprotocol/server-memory"],
+    memoryAgent = new AIAgent({
+      name: "Memory Agent",
+      description: "Use this agent to store and retrieve memories",
+      toolsConfigs: [
+        Servers.memory,
+        {
+          mcpServers: {
+            memory: {
+              command: "npx",
+              args: ["-y", "@modelcontextprotocol/server-memory"],
+            },
           },
         },
-      }
-    );
+      ],
+    });
 
     // The master agent that can manage other agents
-    masterAgent = new MCPAgent(
-      "Master Agent",
-      "An agent that can manage other agents",
-      {
-        type: "agent",
-        agent: sequentialThinkingAgent,
-      },
-      {
-        type: "agent",
-        agent: memoryAgent,
-      },
-      {
-        type: "agent",
-        agent: braveSearchAgent,
-      }
-    );
+    masterAgent = new AIAgent({
+      name: "Master Agent",
+      description: "An agent that can manage other agents",
+      toolsConfigs: [
+        {
+          type: "agent",
+          agent: sequentialThinkingAgent,
+          model: openai("gpt-4o-mini"),
+        },
+        {
+          type: "agent",
+          agent: memoryAgent,
+          model: openai("gpt-4o-mini"),
+        },
+        {
+          type: "agent",
+          agent: braveSearchAgent,
+          model: openai("gpt-4o-mini"),
+        },
+      ],
+    });
   });
 
   afterAll(async () => {

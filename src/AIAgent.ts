@@ -1,11 +1,14 @@
 import {
   experimental_createMCPClient as createMCPClient,
+  generateObject,
+  GenerateObjectResult,
   generateText,
   GenerateTextResult,
+  Schema,
+  jsonSchema,
   tool,
 } from "ai";
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from "ai/mcp-stdio";
-import { openai } from "@ai-sdk/openai";
 import {
   MCPConfig,
   TOOLS,
@@ -15,21 +18,36 @@ import {
   MCPAutoConfig,
   AgentConfig,
   WorkflowConfig,
-  AIAgent,
+  AIAgentInterface,
+  GenerateObjectArgs,
 } from "./types.js";
-import { z } from "zod";
+import { z, ZodType } from "zod";
 import { filterTools } from "./utils.js";
-export class MCPAgent implements AIAgent {
+import { DEFAULT_MAX_STEPS, DEFAULT_MODEL } from "./const.js";
+import { zodToJsonSchema } from "zod-to-json-schema";
+
+export class AIAgent implements AIAgentInterface {
   private clients: Record<string, any> = {};
   private tools: Record<string, any> = {};
   private config: WorkflowConfig[];
-  private agents: Record<string, { agent: AIAgent; config: AgentConfig }> = {};
+  private agents: Record<
+    string,
+    { agent: AIAgentInterface; config: AgentConfig }
+  > = {};
   private initialized: boolean = false;
   private name: string;
   private description: string;
 
-  constructor(name: string, description: string, ...configs: WorkflowConfig[]) {
-    this.config = configs;
+  constructor({
+    name,
+    description,
+    toolsConfigs,
+  }: {
+    name: string;
+    description: string;
+    toolsConfigs: WorkflowConfig[];
+  }) {
+    this.config = toolsConfigs;
     this.name = name;
     this.description = description;
   }
@@ -128,8 +146,16 @@ export class MCPAgent implements AIAgent {
       }) => {
         // Implementation will be handled elsewhere
         const response = await config.agent.generateResponse({
+          model: config.model || DEFAULT_MODEL,
           prompt,
           system: systemMessage,
+          tools: config.tools,
+          toolChoice: config.toolChoice,
+          maxSteps: config.maxSteps,
+          messages: config.messages,
+          providerOptions: config.providerOptions,
+          onStepFinish: config.onStepFinish,
+          filterMCPTools: config.filterMCPTools,
         });
 
         console.debug("Agent response", response.text);
@@ -216,14 +242,29 @@ export class MCPAgent implements AIAgent {
     const filteredTools = filterTools(this.tools, args.filterMCPTools);
     const allTools = { ...filteredTools, ...args.tools };
 
-    console.debug("allTools", Object.keys(allTools));
+    const model = args.model || DEFAULT_MODEL;
+
+    console.debug(
+      "Generating response with ",
+      JSON.stringify(
+        {
+          name: this.name,
+          prompt: args.prompt,
+          model: model.modelId,
+          allTools: Object.keys(allTools),
+          maxSteps: args.maxSteps,
+        },
+        null,
+        2
+      )
+    );
 
     try {
       const response = await generateText({
         ...args,
-        model: args.model || openai("gpt-4o"),
+        model,
         tools: allTools,
-        maxSteps: args.maxSteps || 20,
+        maxSteps: args.maxSteps || DEFAULT_MAX_STEPS,
       });
 
       const finalResponse = { ...response };
@@ -238,6 +279,67 @@ export class MCPAgent implements AIAgent {
       console.error("Error generating response:", error);
       throw error;
     }
+  }
+
+  async generateObject<OBJECT>(args: GenerateObjectArgs<OBJECT>): Promise<{
+    object: OBJECT;
+    textGenerationResult: GenerateTextResult<TOOLS, any>;
+    objectGenerationResult: GenerateObjectResult<OBJECT>;
+    usage: {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+    };
+  }> {
+    const filteredTools = filterTools(this.tools, args.filterMCPTools);
+    const allTools = { ...filteredTools, ...args.tools };
+
+    const model = args.model || DEFAULT_MODEL;
+
+    let schemaJson;
+    if (typeof args.schema === "object" && "jsonSchema" in args.schema) {
+      schemaJson = (args.schema as Schema<OBJECT>).jsonSchema;
+    } else {
+      schemaJson = zodToJsonSchema(args.schema as ZodType<OBJECT>);
+    }
+
+    const textResponse = await this.generateResponse({
+      ...args,
+      system:
+        args.system +
+        "\n\n<Response Format>\n" +
+        `<Schema Name>${args.schemaName}</Schema Name>\n` +
+        `<Schema Description>${args.schemaDescription}</Schema Description>\n` +
+        `<Schema>${JSON.stringify(schemaJson)}</Schema>\n` +
+        "</Response Format>\n\n<Response: ",
+      model,
+      tools: allTools,
+      maxSteps: args.maxSteps || DEFAULT_MAX_STEPS,
+    });
+
+    const response = await generateObject({
+      ...args,
+      prompt: `Create an object that matches the schema from the response: <Response>${textResponse.text}</Response>`,
+      model,
+    });
+
+    response.usage.completionTokens += textResponse.usage.completionTokens;
+    response.usage.promptTokens += textResponse.usage.promptTokens;
+    response.usage.totalTokens += textResponse.usage.totalTokens;
+
+    return {
+      object: response.object,
+      textGenerationResult: textResponse,
+      objectGenerationResult: response,
+      usage: {
+        promptTokens:
+          textResponse.usage.promptTokens + response.usage.promptTokens,
+        completionTokens:
+          textResponse.usage.completionTokens + response.usage.completionTokens,
+        totalTokens:
+          textResponse.usage.totalTokens + response.usage.totalTokens,
+      },
+    };
   }
 
   async close(): Promise<void> {
