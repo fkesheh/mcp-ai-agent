@@ -14,12 +14,17 @@ A TypeScript library that enables AI agents to leverage MCP (Model Context Proto
 - Agent composition - create specialized agents and combine them
 - Named agents with descriptions for improved identification
 - Auto-initialization of agents (no need to call initialize explicitly)
+- Custom tool definitions directly within agent configuration
+- Default model support to simplify multi-agent systems
+- System prompt integration for specialized behaviors
+- Verbose mode for debugging
 
 ## Roadmap
 
 - [x] Basic agent with MCP tools integration
 - [x] Auto handled MCP servers
 - [x] Multi-agent workflows
+- [x] Function based tool handlers
 - [ ] Automatic Swagger/OpenAPI to tools conversion (stateless servers simple integration)
 - [ ] API Server implementation (call your agent on a server)
 - [ ] Observabilty system
@@ -34,23 +39,23 @@ For a complete example implementation, check out the [mcp-ai-agent-example](http
 
 ## Minimal Example
 
-Here's the most basic way to use MCP Agent with preconfigured servers:
+Here's the most basic way to use AI Agent with preconfigured servers:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
 // Use a preconfigured server
-const agent = new MCPAgent(
-  "Sequential Thinking Agent", // Name
-  "This agent can be used to solve complex tasks", // Description
-  Servers.sequentialThinking
-);
+const agent = new AIAgent({
+  name: "Sequential Thinking Agent",
+  description: "This agent can be used to solve complex tasks",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [Servers.sequentialThinking],
+});
 
-// Initialize and use the agent
+// Use the agent
 const response = await agent.generateResponse({
   prompt: "What is 25 * 25?",
-  model: openai("gpt-4o-mini"),
 });
 console.log(response.text);
 ```
@@ -60,58 +65,65 @@ console.log(response.text);
 You can create specialized agents and compose them into a master agent that can delegate tasks:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
 // Create specialized agents for different tasks
-const sequentialThinkingAgent = new MCPAgent(
-  "Sequential Thinker",
-  "Use this agent to think sequentially and resolve complex problems",
-  Servers.sequentialThinking
-);
+const sequentialThinkingAgent = new AIAgent({
+  name: "Sequential Thinker",
+  description:
+    "Use this agent to think sequentially and resolve complex problems",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [Servers.sequentialThinking],
+});
 
-const braveSearchAgent = new MCPAgent(
-  "Brave Search",
-  "Use this agent to search the web for the latest information",
-  Servers.braveSearch
-);
+const braveSearchAgent = new AIAgent({
+  name: "Brave Search",
+  description: "Use this agent to search the web for the latest information",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [Servers.braveSearch],
+});
 
-const memoryAgent = new MCPAgent(
-  "Memory Agent",
-  "Use this agent to store and retrieve memories",
-  {
-    mcpServers: {
-      memory: {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-memory"],
+const memoryAgent = new AIAgent({
+  name: "Memory Agent",
+  description: "Use this agent to store and retrieve memories",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [
+    {
+      mcpServers: {
+        memory: {
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-memory"],
+        },
       },
     },
-  }
-);
+  ],
+});
 
 // Create a master agent that can use all specialized agents
-const masterAgent = new MCPAgent(
-  "Master Agent",
-  "An agent that can manage and delegate to specialized agents",
-  // Include the specialized agents as sub-agents
-  {
-    type: "agent",
-    agent: sequentialThinkingAgent,
-  },
-  {
-    type: "agent",
-    agent: memoryAgent,
-  },
-  {
-    type: "agent",
-    agent: braveSearchAgent,
-  }
-);
+const masterAgent = new AIAgent({
+  name: "Master Agent",
+  description: "An agent that can manage and delegate to specialized agents",
+  model: openai("gpt-4o"),
+  toolsConfigs: [
+    {
+      type: "agent",
+      agent: sequentialThinkingAgent,
+    },
+    {
+      type: "agent",
+      agent: memoryAgent,
+    },
+    {
+      type: "agent",
+      agent: braveSearchAgent,
+    },
+  ],
+});
 
-// Initialize and use the master agent
+// Use the master agent
 const response = await masterAgent.generateResponse({
   prompt: "What is the latest Bitcoin price? Store the answer in memory.",
-  model: openai("gpt-4o"),
 });
 
 console.log(response.text);
@@ -119,7 +131,6 @@ console.log(response.text);
 // You can ask the memory agent about information stored by the master agent
 const memoryResponse = await masterAgent.generateResponse({
   prompt: "What information have we stored about Bitcoin price?",
-  model: openai("gpt-4o"),
 });
 
 console.log(memoryResponse.text);
@@ -130,113 +141,195 @@ console.log(memoryResponse.text);
 The MCP AI Agent can be used to create a crew of specialized agents that work together to accomplish complex tasks, similar to the Crew AI pattern. Here's an example of setting up a project management workflow with multiple specialized agents:
 
 ```typescript
-import { AIAgent } from "mcp-ai-agent";
-import { Servers } from "mcp-ai-agent";
+import { AIAgent, CrewStyleHelpers, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
+import * as dotenv from "dotenv";
 
-// Initialize specialized agents for project management
-const projectPlannerAgent = new AIAgent({
-  name: "Project Planner",
-  system:
-    "Responsible for breaking down projects into actionable tasks, setting timelines, and identifying dependencies",
-  toolsConfigs: [Servers.sequentialThinking],
-});
+// Load environment variables
+dotenv.config();
 
-const estimationAgent = new AIAgent({
-  name: "Project Estimator",
-  system:
-    "Provides accurate time, resource, and effort estimations for project tasks",
-  toolsConfigs: [Servers.sequentialThinking],
-});
-
-const resourceAllocatorAgent = new AIAgent({
-  name: "Resource Allocator",
-  system:
-    "Allocates resources to project tasks based on skills, availability, and workload",
-  toolsConfigs: [Servers.sequentialThinking],
-});
-
-// Define project details
+// Project details
 const projectDetails = {
   project: "Website",
   industry: "Technology",
-  project_objectives: "Create a website for a small business",
   team_members: [
     "John Doe (Project Manager)",
     "Jane Doe (Software Engineer)",
     "Bob Smith (Designer)",
     "Alice Johnson (QA Engineer)",
+    "Tom Brown (QA Engineer)",
   ],
   project_requirements: [
     "Responsive design for desktop and mobile",
     "Modern user interface",
-    "User-friendly navigation",
+    "Intuitive navigation system",
     "About Us page",
     "Services page",
     "Contact page with form",
+    "Blog section",
+    "SEO optimization",
+    "Social media integration",
+    "Testimonials section",
   ],
 };
 
+// Define tasks
 const tasks = {
-  projectPlanTask: (projectDetails: typeof projectDetails) => `Create a detailed project plan for ${
-      projectDetails.project
-    } based on these requirements: ${projectDetails.project_requirements.join(
-      ", "
-    )}`,
-  estimateTask: (projectPlan: string) => `Estimate time and resources for this project plan: ${projectPlan}`,
-  allocationTask: (projectDetails: typeof projectDetails, estimations: string) =>
-      `Allocate team members to tasks based on this estimation: ${
-      estimations
-    }. Team: ${projectDetails.team_members.join(", ")}`,
-}
+  task_breakdown: (details) => ({
+    description: `Break down the ${details.project} project requirements into individual tasks.`,
+    expected_output: `A comprehensive list of tasks with descriptions, timelines, and dependencies.`,
+  }),
+  time_estimation: (details) => ({
+    description: `Estimate time and resources for each task in the ${details.project} project.`,
+    expected_output: `A detailed estimation report for each task.`,
+  }),
+  resource_allocation: (details) => ({
+    description: `Allocate tasks to team members based on skills and availability.`,
+    expected_output: `A resource allocation chart with assignments and timeline.`,
+  }),
+};
 
-// Define schema for resource allocation
-const projectPlanSchema = z.object({
+// Create agent
+const agent = new AIAgent({
+  name: "Sequential Thinking Agent",
+  description: "A sequential thinking agent",
+  toolsConfigs: [Servers.sequentialThinking],
+});
+
+// Define crew members
+const crew = {
+  planner: {
+    name: "Project Planner",
+    goal: "Break down the project into actionable tasks",
+    backstory: "Experienced project manager with attention to detail",
+    agent: agent,
+    model: openai("gpt-4o-mini"),
+  },
+  estimator: {
+    name: "Estimation Analyst",
+    goal: "Provide accurate time and resource estimations",
+    backstory: "Expert in project estimation with data-driven approach",
+    agent: agent,
+    model: openai("gpt-4o-mini"),
+  },
+  allocator: {
+    name: "Resource Allocator",
+    goal: "Optimize task allocation among team members",
+    backstory: "Specialist in team dynamics and resource management",
+    agent: agent,
+    model: openai("gpt-4o-mini"),
+  },
+};
+
+// Define schema
+const planSchema = z.object({
+  rationale: z.string(),
   tasks: z.array(
     z.object({
-      task_name: z.string().describe("Name of the task"),
-      estimated_time_hours: z.number().describe("Estimated time in hours"),
-      required_resources: z.array(z.string()).describe("Required resources"),
+      task_name: z.string(),
+      estimated_time_hours: z.number(),
+      required_resources: z.array(z.string()),
+      assigned_to: z.string(),
+      start_date: z.string(),
+      end_date: z.string(),
     })
   ),
   milestones: z.array(
     z.object({
-      milestone_name: z.string().describe("Name of the milestone"),
-      tasks: z.array(z.string()).describe("Tasks for this milestone"),
+      milestone_name: z.string(),
+      tasks: z.array(z.string()),
+      deadline: z.string(),
     })
   ),
+  workload_distribution: z.record(z.number()),
 });
 
-// Execute the workflow
-async function runProjectWorkflow() {
-  // Step 1: Create project plan
-  const projectPlan = await projectPlannerAgent.generateResponse({
-    prompt: tasks.projectPlanTask(projectDetails)
-    model: openai("gpt-4o-mini"),
+async function runWorkflow() {
+  // Execute planning task
+  const projectPlan = await CrewStyleHelpers.executeTask({
+    agent: crew.planner,
+    task: tasks.task_breakdown(projectDetails),
   });
+  console.log("Project Plan:", projectPlan.text);
 
-  // Step 2: Estimate project tasks
-  const estimations = await estimationAgent.generateResponse({
-    prompt: `Estimate time and resources for this project plan: ${projectPlan.text}`,
-    model: openai("gpt-4o-mini"),
+  // Execute estimation task
+  const timeEstimation = await CrewStyleHelpers.executeTask({
+    agent: crew.estimator,
+    task: tasks.time_estimation(projectDetails),
+    previousTasks: { projectPlan: projectPlan.text },
   });
+  console.log("Time Estimation:", timeEstimation.text);
 
-  // Step 3: Allocate resources
-  const resourceAllocation = await resourceAllocatorAgent.generateObject({
-    prompt: `Allocate team members to tasks based on this estimation: ${
-      estimations.text
-    }. Team: ${projectDetails.team_members.join(", ")}`,
-    model: openai("gpt-4o-mini"),
-    schema: projectPlanSchema,
+  // Execute allocation task
+  const resourceAllocation = await CrewStyleHelpers.executeTask({
+    agent: crew.allocator,
+    task: tasks.resource_allocation(projectDetails),
+    previousTasks: {
+      projectPlan: projectPlan.text,
+      timeEstimation: timeEstimation.text,
+    },
+    schema: planSchema,
   });
+  console.log(
+    "Resource Allocation:",
+    JSON.stringify(resourceAllocation.object, null, 2)
+  );
 
-  return {
-    projectPlan: projectPlan.text,
-    estimations: estimations.text,
-    resourceAllocation: resourceAllocation.object,
-  };
+  // Cleanup
+  await agent.close();
 }
+
+runWorkflow().catch(console.error);
+```
+
+### Custom Tools
+
+You can easily add custom tools directly to your agent:
+
+```typescript
+import { AIAgent } from "mcp-ai-agent";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
+
+// Create an agent with custom tools
+const calculatorAgent = new AIAgent({
+  name: "Calculator Agent",
+  description: "An agent that can perform mathematical operations",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [
+    {
+      type: "tool",
+      name: "multiply",
+      description: "Multiplies two numbers",
+      parameters: z.object({
+        number1: z.number(),
+        number2: z.number(),
+      }),
+      execute: async (args) => {
+        return args.number1 * args.number2;
+      },
+    },
+    {
+      type: "tool",
+      name: "add",
+      description: "Adds two numbers",
+      parameters: z.object({
+        number1: z.number(),
+        number2: z.number(),
+      }),
+      execute: async (args) => {
+        return args.number1 + args.number2;
+      },
+    },
+  ],
+});
+
+// Use the agent with custom tools
+const response = await calculatorAgent.generateResponse({
+  prompt: "What is 125 * 37?",
+});
+console.log(response.text);
 ```
 
 ## Supported MCP Servers
@@ -257,23 +350,25 @@ MCP AI Agent comes with preconfigured support for the following servers:
 You can easily use any supported server by importing it from the `Servers` namespace:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 
 // Use single server
-const agent1 = new MCPAgent(
-  "Sequential Thinking Agent",
-  "Agent for sequential thinking",
-  Servers.sequentialThinking
-);
+const agent1 = new AIAgent({
+  name: "Sequential Thinking Agent",
+  description: "Agent for sequential thinking",
+  toolsConfigs: [Servers.sequentialThinking],
+});
 
 // Combine multiple servers
-const agent2 = new MCPAgent(
-  "Multi-Tool Agent",
-  "Agent with multiple capabilities",
-  Servers.sequentialThinking,
-  Servers.memory,
-  Servers.braveSearch
-);
+const agent2 = new AIAgent({
+  name: "Multi-Tool Agent",
+  description: "Agent with multiple capabilities",
+  toolsConfigs: [
+    Servers.sequentialThinking,
+    Servers.memory,
+    Servers.braveSearch,
+  ],
+});
 ```
 
 ### Contributing New Servers
@@ -316,17 +411,15 @@ export const yourServerName: MCPAutoConfig = {
 You can initialize the agent with multiple servers:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
 // Combine multiple preconfigured servers
-const agent = new MCPAgent(
-  "Multi-Capability Agent",
-  "An agent with multiple specialized capabilities",
-  Servers.sequentialThinking,
-  Servers.memory,
-  Servers.fetch
-);
+const agent = new AIAgent({
+  name: "Multi-Capability Agent",
+  description: "An agent with multiple specialized capabilities",
+  toolsConfigs: [Servers.sequentialThinking, Servers.memory, Servers.fetch],
+});
 
 const response = await agent.generateResponse({
   prompt: "What is 25 * 25?",
@@ -338,25 +431,27 @@ console.log(response.text);
 ### Using Stdio Tools Manually
 
 ```typescript
-import { MCPAgent } from "mcp-ai-agent";
+import { AIAgent } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
-const agent = new MCPAgent(
-  "Custom Server Agent",
-  "Agent using a manually configured sequential thinking server",
-  {
-    mcpServers: {
-      "sequential-thinking": {
-        command: "npx",
-        args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+const agent = new AIAgent({
+  name: "Custom Server Agent",
+  description: "Agent using a manually configured sequential thinking server",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [
+    {
+      mcpServers: {
+        "sequential-thinking": {
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+        },
       },
     },
-  }
-);
+  ],
+});
 
 const response = await agent.generateResponse({
   prompt: "What is 25 * 25?",
-  model: openai("gpt-4o-mini"),
 });
 console.log(response.text);
 ```
@@ -366,28 +461,30 @@ console.log(response.text);
 You can also use Server-Sent Events (SSE) transport for connecting to MCP servers:
 
 ```typescript
-import { MCPAgent } from "mcp-ai-agent";
+import { AIAgent } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
-const agent = new MCPAgent(
-  "SSE Transport Agent",
-  "Agent using SSE transport for remote server connection",
-  {
-    mcpServers: {
-      "sequential-thinking": {
-        type: "sse",
-        url: "https://your-mcp-server.com/sequential-thinking",
-        headers: {
-          "x-api-key": "your-api-key",
+const agent = new AIAgent({
+  name: "SSE Transport Agent",
+  description: "Agent using SSE transport for remote server connection",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [
+    {
+      mcpServers: {
+        "sequential-thinking": {
+          type: "sse",
+          url: "https://your-mcp-server.com/sequential-thinking",
+          headers: {
+            "x-api-key": "your-api-key",
+          },
         },
       },
     },
-  }
-);
+  ],
+});
 
 const response = await agent.generateResponse({
   prompt: "What is 25 * 25?",
-  model: openai("gpt-4o-mini"),
 });
 console.log(response.text);
 ```
@@ -399,18 +496,18 @@ console.log(response.text);
 You can include images in your messages:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 import fs from "fs";
 
-const agent = new MCPAgent(
-  "Image Processing Agent",
-  "Agent capable of processing images",
-  Servers.sequentialThinking
-);
+const agent = new AIAgent({
+  name: "Image Processing Agent",
+  description: "Agent capable of processing images",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [Servers.sequentialThinking],
+});
 
 const response = await agent.generateResponse({
-  model: openai("gpt-4o-mini"),
   messages: [
     {
       role: "user",
@@ -436,18 +533,18 @@ await agent.close();
 You can also process PDFs:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 import fs from "fs";
 
-const agent = new MCPAgent(
-  "PDF Processing Agent",
-  "Agent capable of processing PDF documents",
-  Servers.sequentialThinking
-);
+const agent = new AIAgent({
+  name: "PDF Processing Agent",
+  description: "Agent capable of processing PDF documents",
+  model: openai("gpt-4o-mini"),
+  toolsConfigs: [Servers.sequentialThinking],
+});
 
 const response = await agent.generateResponse({
-  model: openai("gpt-4o-mini"),
   messages: [
     {
       role: "user",
@@ -472,41 +569,44 @@ await agent.close();
 
 ### Mixing Preconfigured and Custom Server Configurations
 
-You can combine preconfigured servers (using MCPAutoConfig) with manually configured servers (using MCPConfig):
+You can combine preconfigured servers with manually configured servers:
 
 ```typescript
-import { MCPAgent, Servers } from "mcp-ai-agent";
+import { AIAgent, Servers } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
 // Create an agent with both preconfigured and custom servers
-const agent = new MCPAgent(
-  "Hybrid Configuration Agent",
-  "Agent that combines preconfigured and custom server configurations",
-  // Use a preconfigured server from the Servers namespace
-  Servers.sequentialThinking,
+const agent = new AIAgent({
+  name: "Hybrid Configuration Agent",
+  description:
+    "Agent that combines preconfigured and custom server configurations",
+  model: openai("gpt-4o"),
+  toolsConfigs: [
+    // Use a preconfigured server from the Servers namespace
+    Servers.sequentialThinking,
 
-  // Add a manually configured server
-  {
-    mcpServers: {
-      "custom-api-server": {
-        type: "sse",
-        url: "https://api.example.com/mcp-endpoint",
-        headers: {
-          Authorization: `Bearer ${process.env.API_TOKEN}`,
-          "Content-Type": "application/json",
+    // Add a manually configured server
+    {
+      mcpServers: {
+        "custom-api-server": {
+          type: "sse",
+          url: "https://api.example.com/mcp-endpoint",
+          headers: {
+            Authorization: `Bearer ${process.env.API_TOKEN}`,
+            "Content-Type": "application/json",
+          },
         },
       },
     },
-  },
 
-  // Add another preconfigured server
-  Servers.memory
-);
+    // Add another preconfigured server
+    Servers.memory,
+  ],
+});
 
 const response = await agent.generateResponse({
   prompt:
     "Search for information about AI agents and store the results in memory",
-  model: openai("gpt-4o"),
   // Optionally filter which tools to use
   filterMCPTools: (tool) => {
     // Only use specific tools from the available servers
@@ -525,7 +625,7 @@ await agent.close();
 You can also create and use your own auto-configured server library definition:
 
 ```typescript
-import { MCPAgent, MCPAutoConfig } from "mcp-ai-agent";
+import { AIAgent, MCPAutoConfig } from "mcp-ai-agent";
 import { openai } from "@ai-sdk/openai";
 
 // Define a custom server configuration
@@ -560,17 +660,16 @@ const customVectorDB: MCPAutoConfig = {
 };
 
 // Create an agent with the custom server and a preconfigured server
-const agent = new MCPAgent(
-  "Vector DB Agent",
-  "Agent with vector database capabilities",
-  customVectorDB,
-  Servers.sequentialThinking
-);
+const agent = new AIAgent({
+  name: "Vector DB Agent",
+  description: "Agent with vector database capabilities",
+  model: openai("gpt-4o"),
+  toolsConfigs: [customVectorDB, Servers.sequentialThinking],
+});
 
 const response = await agent.generateResponse({
   prompt:
     "Use sequential thinking to analyze this document and store it in the vector database",
-  model: openai("gpt-4o"),
   messages: [
     {
       role: "user",
@@ -596,11 +695,11 @@ await agent.close();
 
 ## Configuration
 
-The `MCPAgent` constructor accepts a name, description, and multiple configuration objects:
+The `AIAgent` constructor accepts a name, description, and multiple configuration objects:
 
 ```typescript
 /**
- * Create a new MCPAgent with a name, description, and one or more configurations
+ * Create a new AIAgent with a name, description, and one or more configurations
  * @param name - The name of the agent
  * @param description - A description of the agent's capabilities
  * @param configs - Configuration objects for various MCP servers and sub-agents
@@ -661,14 +760,14 @@ interface MCPAutoConfig {
 
 ### Standard Configuration
 
-The `MCPAgentConfig` interface defines the configuration for the MCPAgent:
+The `AIAgentConfig` interface defines the configuration for the AIAgent:
 
 ```typescript
 /**
- * Full configuration for MCPAgent
+ * Full configuration for AIAgent
  * Contains configuration for all MCP servers
  */
-interface MCPAgentConfig {
+interface AIAgentConfig {
   /**
    * Map of server names to their configurations
    */
@@ -855,42 +954,66 @@ type MCPResponse = GenerateTextResult<any, any>;
 
 ## API
 
-### `MCPAgent`
+### `AIAgent`
 
-The main class that manages connections to MCP servers and generates responses.
+The main class that simplifies agent configuration and offers enhanced features.
 
 #### Constructor
 
 ```typescript
-constructor(...configs: (MCPAutoConfig | MCPConfig)[])
+constructor({
+  name,
+  description,
+  systemPrompt,
+  model,
+  verbose,
+  toolsConfigs
+}: {
+  name: string;
+  description: string;
+  systemPrompt?: string;
+  model?: LanguageModel;
+  verbose?: boolean;
+  toolsConfigs?: WorkflowConfig[];
+})
 ```
-
-- `configs` - One or more configuration objects for the MCPAgent
 
 #### Methods
 
-##### `initialize(): Promise<void>`
-
-Initializes the MCPAgent by starting all configured MCP servers and collecting their tools.
-
 ##### `generateResponse(args: GenerateTextArgs): Promise<GenerateTextResult<TOOLS, any>>`
 
-Generates a response using the AI model and the tools from the MCP servers.
+Generates a response using the AI model and the tools from the MCP servers and custom tools.
 
 Arguments:
 
 - `prompt` - The user's message to respond to
-- `model` - The AI model to use (e.g., `openai("gpt-4o-mini")`)
+- `model` - Optional: Override the default model
+- `system` - Optional: Override the default system prompt
 - `maxSteps` - Maximum number of steps for the AI to take (default: 20)
 - `tools` - Additional tools to make available to the model
 - `filterMCPTools` - Optional function to filter which MCP tools to use
 - `onStepFinish` - Optional callback function that is called after each step
-- `toolChoice` - Optional parameter to control tool selection behavior
-- `providerOptions` - Optional metadata to pass to the provider
+- `messages` - Alternative to prompt, allows for rich content messages
+
+##### `generateObject<T>(args: GenerateObjectArgs): Promise<GenerateObjectResult<TOOLS, T>>`
+
+Generates a structured object response using a schema.
+
+Arguments:
+
+- `prompt` - The user's message
+- `model` - Optional: Override the default model
+- `schema` - Zod schema or JSON schema for the expected response object
+- `schemaName` - Optional name for the schema
+- `schemaDescription` - Optional description for the schema
 
 ##### `close(): Promise<void>`
 
 Closes all server connections.
+
+##### `getInfo(): { name: string; description: string; tools: string[]; agents?: string[]; model?: LanguageModel; }`
+
+Returns information about the agent, including its name, description, available tools, agents, and default model.
 
 ## License
 

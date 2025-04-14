@@ -9,4 +9,7 @@ export type {
   ToolSet,
   AIAgentInterface,
 } from "./types.js";
+
+export * as CrewStyleHelpers from "./utils/CrewStyleHelpers.js";
+
 export * as Servers from "./servers/index.js";

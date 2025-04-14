@@ -322,6 +322,8 @@ export interface AIAgentInterface {
     description: string;
     tools: string[];
     agents?: string[];
+    model?: LanguageModel;
+    system?: string;
   };
 }
 
@@ -396,4 +398,18 @@ export interface AgentConfig {
   filterMCPTools?: (tool: TOOLS) => boolean;
 }
 
-export type WorkflowConfig = MCPConfig | MCPAutoConfig | AgentConfig;
+type ToolParameters = z.ZodTypeAny | Schema<any>;
+
+export interface ToolConfig {
+  type: "tool";
+  name: string;
+  description: string;
+  parameters: ToolParameters;
+  execute: (args: any) => Promise<any>;
+}
+
+export type WorkflowConfig =
+  | MCPConfig
+  | MCPAutoConfig
+  | AgentConfig
+  | ToolConfig;

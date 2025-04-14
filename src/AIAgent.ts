@@ -4,11 +4,13 @@ import {
   GenerateObjectResult,
   generateText,
   GenerateTextResult,
+  LanguageModel,
   Schema,
-  jsonSchema,
   tool,
 } from "ai";
+
 import { Experimental_StdioMCPTransport as StdioMCPTransport } from "ai/mcp-stdio";
+
 import {
   MCPConfig,
   TOOLS,
@@ -21,10 +23,13 @@ import {
   AIAgentInterface,
   GenerateObjectArgs,
 } from "./types.js";
+
 import { z, ZodType } from "zod";
 import { filterTools } from "./utils.js";
 import { DEFAULT_MAX_STEPS, DEFAULT_MODEL } from "./const.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import { toSnakeCase } from "./utils/textUtils.js";
+import { openai } from "@ai-sdk/openai";
 
 export class AIAgent implements AIAgentInterface {
   private clients: Record<string, any> = {};
@@ -37,23 +42,45 @@ export class AIAgent implements AIAgentInterface {
   private initialized: boolean = false;
   private name: string;
   private description: string;
+  private system?: string;
+  private model: LanguageModel;
+  private verbose: boolean = false;
 
   constructor({
     name,
     description,
     toolsConfigs,
+    systemPrompt,
+    model,
+    verbose,
   }: {
     name: string;
     description: string;
-    toolsConfigs: WorkflowConfig[];
+    systemPrompt?: string;
+    model?: LanguageModel;
+    verbose?: boolean;
+    toolsConfigs?: WorkflowConfig[];
   }) {
-    this.config = toolsConfigs;
+    this.config = toolsConfigs || [];
     this.name = name;
     this.description = description;
+    this.system = systemPrompt;
+    this.model = model || DEFAULT_MODEL;
+    this.verbose = !!verbose;
+  }
+
+  private log(
+    level: "debug" | "info" | "warn" | "error",
+    message: string,
+    ...args: any[]
+  ) {
+    if (this.verbose || level === "error") {
+      console[level](message, ...args);
+    }
   }
 
   private async initializeSdtioServer(name: string, serverConfig: StdioConfig) {
-    console.debug("Initializing stdio server", name);
+    this.log("info", "Initializing stdio server", name);
 
     const transport = new StdioMCPTransport(serverConfig);
 
@@ -63,7 +90,7 @@ export class AIAgent implements AIAgentInterface {
   }
 
   private async initializeSSEServer(name: string, serverConfig: SSEConfig) {
-    console.debug("Initializing sse server", name);
+    this.log("info", "Initializing sse server", name);
 
     this.clients[name] = await createMCPClient({
       transport: serverConfig,
@@ -71,7 +98,7 @@ export class AIAgent implements AIAgentInterface {
   }
 
   private async initializeAutoServer(name: string, autoConfig: MCPAutoConfig) {
-    console.debug("Initializing auto server", name);
+    this.log("info", "Initializing auto server", name);
 
     // Check if all environment variables are set
     const missingEnvVars = Object.entries(autoConfig.parameters).filter(
@@ -112,12 +139,11 @@ export class AIAgent implements AIAgentInterface {
   }
 
   private async initializeAgentConfig(config: AgentConfig) {
-    const name =
-      config.name ||
-      config.agent.getInfo?.()?.name ||
-      Math.random().toString(36).substring(2, 15);
+    const name = config.name
+      ? toSnakeCase(config.name)
+      : toSnakeCase(config.agent.getInfo?.()?.name);
 
-    console.debug("Initializing agent config", name);
+    this.log("info", "Initializing agent config", name);
 
     this.agents[name] = {
       agent: config.agent,
@@ -125,30 +151,30 @@ export class AIAgent implements AIAgentInterface {
     };
 
     // Also add a tool for this agent
-    this.tools[`agent_${name.toLowerCase().replace(" ", "_")}`] = tool({
+    this.tools[`agent_${toSnakeCase(name)}`] = tool({
       description:
         config.description ||
         config.agent.getInfo?.()?.description ||
         `Call the ${config.name} agent for specialized tasks`,
       parameters: z.object({
-        prompt: z.string().describe("The prompt to send to the agent"),
-        systemMessage: z
+        context: z
           .string()
-          .optional()
-          .describe("Optional system message to guide the agent's behavior"),
+          .describe(
+            "The context to send to the agent. Add any relevant information the agent needs to know for the task."
+          ),
+        prompt: z.string().describe("The prompt to send to the agent"),
       }),
       execute: async ({
+        context,
         prompt,
-        systemMessage,
       }: {
+        context: string;
         prompt: string;
-        systemMessage?: string;
       }) => {
-        // Implementation will be handled elsewhere
         const response = await config.agent.generateResponse({
-          model: config.model || DEFAULT_MODEL,
-          prompt,
-          system: systemMessage,
+          model: config.model || config.agent.getInfo?.()?.model || this.model,
+          prompt: `<Context>${context}</Context>\n<Prompt>${prompt}</Prompt>`,
+          system: config.system || config.agent.getInfo?.()?.system || "",
           tools: config.tools,
           toolChoice: config.toolChoice,
           maxSteps: config.maxSteps,
@@ -158,7 +184,7 @@ export class AIAgent implements AIAgentInterface {
           filterMCPTools: config.filterMCPTools,
         });
 
-        console.debug("Agent response", response.text);
+        this.log("info", "Agent response", response.text);
 
         return response.text;
       },
@@ -192,7 +218,7 @@ export class AIAgent implements AIAgentInterface {
         })
       );
     } catch (error) {
-      console.error("Error initializing MCP clients:", error);
+      this.log("error", "Error initializing MCP clients:", error);
       await this.close();
       throw error;
     }
@@ -200,16 +226,25 @@ export class AIAgent implements AIAgentInterface {
 
   private async initializeConfigRouter(config: WorkflowConfig) {
     if ("type" in config && config.type === "auto") {
-      console.debug("Config Router: Initializing auto server", config.name);
+      this.log("info", "Config Router: Initializing auto server", config.name);
       await this.initializeAutoServer(config.name, config);
     } else if ("type" in config && config.type === "agent") {
-      console.debug(
+      this.log(
+        "info",
         "Config Router: Initializing agent config",
         config.agent.getInfo?.()?.name
       );
       await this.initializeAgentConfig(config);
+    } else if ("type" in config && config.type === "tool") {
+      this.log("info", "Config Router: Initializing tool", config.name);
+      this.tools[toSnakeCase(config.name)] = tool({
+        description: config.description,
+        parameters: config.parameters,
+        execute: config.execute,
+      });
     } else {
-      console.debug(
+      this.log(
+        "info",
         "Config Router: Initializing MCP config",
         Object.keys(config.mcpServers)
       );
@@ -242,9 +277,10 @@ export class AIAgent implements AIAgentInterface {
     const filteredTools = filterTools(this.tools, args.filterMCPTools);
     const allTools = { ...filteredTools, ...args.tools };
 
-    const model = args.model || DEFAULT_MODEL;
+    const model = args.model || this.model;
 
-    console.debug(
+    this.log(
+      "info",
       "Generating response with ",
       JSON.stringify(
         {
@@ -262,6 +298,7 @@ export class AIAgent implements AIAgentInterface {
     try {
       const response = await generateText({
         ...args,
+        system: args.system || this.system,
         model,
         tools: allTools,
         maxSteps: args.maxSteps || DEFAULT_MAX_STEPS,
@@ -276,7 +313,11 @@ export class AIAgent implements AIAgentInterface {
 
       return finalResponse;
     } catch (error) {
-      console.error("Error generating response:", error);
+      this.log(
+        "error",
+        "Error generating response:",
+        JSON.stringify(error, null, 2)
+      );
       throw error;
     }
   }
@@ -294,7 +335,7 @@ export class AIAgent implements AIAgentInterface {
     const filteredTools = filterTools(this.tools, args.filterMCPTools);
     const allTools = { ...filteredTools, ...args.tools };
 
-    const model = args.model || DEFAULT_MODEL;
+    const model = args.model || this.model;
 
     let schemaJson;
     if (typeof args.schema === "object" && "jsonSchema" in args.schema) {
@@ -306,12 +347,12 @@ export class AIAgent implements AIAgentInterface {
     const textResponse = await this.generateResponse({
       ...args,
       system:
-        args.system +
+        (args.system || this.system) +
         "\n\n<Response Format>\n" +
         `<Schema Name>${args.schemaName}</Schema Name>\n` +
         `<Schema Description>${args.schemaDescription}</Schema Description>\n` +
         `<Schema>${JSON.stringify(schemaJson)}</Schema>\n` +
-        "</Response Format>\n\n<Response: ",
+        "</Response Format>\n\n",
       model,
       tools: allTools,
       maxSteps: args.maxSteps || DEFAULT_MAX_STEPS,
@@ -362,12 +403,16 @@ export class AIAgent implements AIAgentInterface {
     description: string;
     tools: string[];
     agents?: string[];
+    model?: LanguageModel;
+    system?: string;
   } {
     return {
       name: this.name,
       description: this.description,
       tools: Object.keys(this.tools),
       agents: Object.keys(this.agents),
+      model: this.model,
+      system: this.system,
     };
   }
 }
