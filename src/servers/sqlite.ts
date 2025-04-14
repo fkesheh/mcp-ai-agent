@@ -24,20 +24,16 @@ export const sqlite: MCPAutoConfig = {
     },
   },
   mcpConfig: {
-    mcpServers: {
-      sqlite: {
-        command: "docker",
-        args: [
-          "run",
-          "--rm",
-          "-i",
-          "-v",
-          "mcp-test:/mcp",
-          "mcp/sqlite",
-          "--db-path",
-          "${SQLITE_DB_PATH}",
-        ],
-      },
-    },
+    command: "docker",
+    args: [
+      "run",
+      "--rm",
+      "-i",
+      "-v",
+      "mcp-test:/mcp",
+      "mcp/sqlite",
+      "--db-path",
+      "${SQLITE_DB_PATH}",
+    ],
   },
 };
