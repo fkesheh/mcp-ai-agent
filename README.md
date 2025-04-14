@@ -35,7 +35,7 @@ A TypeScript library that enables AI agents to leverage MCP (Model Context Proto
 npm install mcp-ai-agent
 ```
 
-For a complete example implementation, check out the [mcp-ai-agent-example](https://github.com/fkesheh/mcp-ai-agent-example) repository.
+For a comprehensive example implementation, check out the [mcp-ai-agent-example](https://github.com/fkesheh/mcp-ai-agent-example) repository.
 
 ## Minimal Example
 
