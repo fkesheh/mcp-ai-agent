@@ -242,7 +242,9 @@ const planSchema = z.object({
       deadline: z.string(),
     })
   ),
-  workload_distribution: z.record(z.number()),
+  workload_distribution: z
+    .record(z.string(), z.number())
+    .describe("Total hours allocated to each team member"),
 });
 
 async function runWorkflow() {
