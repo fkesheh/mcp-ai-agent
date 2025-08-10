@@ -55,7 +55,7 @@ describe("Agent E2E", () => {
       description:
         "Use this agent to think sequentially and resolve complex problems",
       toolsConfigs: [Servers.sequentialThinking],
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-5-nano"),
     });
 
     // The brave search agent
@@ -64,7 +64,7 @@ describe("Agent E2E", () => {
       description:
         "Use this agent to search the web for the latest information",
       toolsConfigs: [Servers.braveSearch],
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-5-nano"),
     });
 
     // The memory agent
@@ -74,7 +74,7 @@ describe("Agent E2E", () => {
         "Use this agent to store and retrieve memories. Pass a full prompt to the agent with all the context it will need to store and retrieve memories.",
       systemPrompt:
         "If the use asks to store something use the create_entities tool. If the user asks to retrieve something use the read_graph tool.",
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-5-nano"),
       toolsConfigs: [
         {
           mcpServers: {
@@ -91,7 +91,7 @@ describe("Agent E2E", () => {
     masterAgent = new AIAgent({
       name: "Master Agent",
       description: "An agent that can manage other agents",
-      model: openai("gpt-4o-mini"),
+      model: openai("gpt-5-nano"),
       toolsConfigs: [
         {
           type: "agent",

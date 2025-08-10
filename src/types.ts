@@ -1,15 +1,24 @@
 // Types for the MCPAgent library
 import {
-  CoreMessage,
   GenerateObjectResult,
   GenerateTextOnStepFinishCallback,
   GenerateTextResult,
   LanguageModel,
-  Message,
+  ModelMessage,
   ProviderMetadata,
   Schema,
   ToolChoice,
+  ToolSet as AiToolSet,
+  StopCondition,
+  Output,
+  TelemetrySettings,
+  CallSettings,
+  Prompt,
+  LanguageModelUsage,
+  PrepareStepFunction,
+  ToolCallRepairFunction,
 } from "ai";
+import { ProviderOptions, IdGenerator } from "@ai-sdk/provider-utils";
 
 import Stream from "node:stream";
 import { z } from "zod";
@@ -70,7 +79,7 @@ export type MCPResponse = GenerateTextResult<any, any>;
 /**
  * Generic type for tool configurations
  */
-export type TOOLS = Record<string, any>;
+export type TOOLS = AiToolSet;
 
 /**
  * Type for handling I/O redirection
@@ -146,64 +155,205 @@ export interface MCPConfig {
   mcpServers: Record<string, MCPServerConfig | MCPAutoConfig>;
 }
 
-/**
- * Arguments for generating text using an AI model
- */
-export interface GenerateTextArgs {
+export interface GenerateTextArgsExtra {
   /**
-   * Language model to use
-   */
-  model?: LanguageModel;
-
-  /**
-   * Tools to make available to the model
-   */
-  tools?: TOOLS;
-
-  /**
-   * Tool selection configuration
-   */
-  toolChoice?: ToolChoice<TOOLS>;
-
-  /**
-   * Maximum number of steps to execute
+   * Maximum number of steps to take
    */
   maxSteps?: number;
-
-  /**
-   * System message to include in the prompt
-   * Can be used with `prompt` or `messages`
-   */
-  system?: string;
-
-  /**
-   * A simple text prompt
-   * You can either use `prompt` or `messages` but not both
-   */
-  prompt?: string;
-
-  /**
-   * A list of messages
-   * You can either use `prompt` or `messages` but not both
-   */
-  messages?: Array<CoreMessage> | Array<Omit<Message, "id">>;
-
-  /**
-   * Provider-specific options
-   */
-  providerOptions?: ProviderMetadata;
-
-  /**
-   * Callback function that is called when a step finishes
-   */
-  onStepFinish?: GenerateTextOnStepFinishCallback<TOOLS>;
 
   /**
    * Function to filter which MCP tools should be available
    * @param tool The tool to evaluate
    * @returns Boolean indicating whether to include the tool
    */
-  filterMCPTools?: (tool: TOOLS) => boolean;
+  filterMCPTools?: (tool: TOOLS[string]) => boolean;
+}
+/**
+ * Arguments for generating text using an AI model
+ */
+export interface GenerateTextArgs<
+  TOOLS extends ToolSet = any,
+  OUTPUT = never,
+  OUTPUT_PARTIAL = never
+> extends GenerateTextArgsExtra,
+    CallSettings,
+    Prompt {
+  /**
+   * The language model to use.
+   */
+  model?: LanguageModel;
+
+  /**
+   * The tools that the model can call. The model needs to support calling tools.
+   */
+  tools?: TOOLS;
+
+  /**
+   * The tool choice strategy. Default: 'auto'.
+   */
+  toolChoice?: ToolChoice<NoInfer<TOOLS>>;
+
+  /**
+   * A system message that will be part of the prompt.
+   */
+  system?: string;
+
+  /**
+   * A simple text prompt. You can either use `prompt` or `messages` but not both.
+   */
+  prompt?: string;
+
+  /**
+   * A list of messages. You can either use `prompt` or `messages` but not both.
+   */
+  messages?: any[];
+
+  /**
+   * Maximum number of tokens to generate.
+   */
+  maxOutputTokens?: number;
+
+  /**
+   * Temperature setting.
+   * The value is passed through to the provider. The range depends on the provider and model.
+   * It is recommended to set either `temperature` or `topP`, but not both.
+   */
+  temperature?: number;
+
+  /**
+   * Nucleus sampling.
+   * The value is passed through to the provider. The range depends on the provider and model.
+   * It is recommended to set either `temperature` or `topP`, but not both.
+   */
+  topP?: number;
+
+  /**
+   * Only sample from the top K options for each subsequent token.
+   * Used to remove "long tail" low probability responses.
+   * Recommended for advanced use cases only. You usually only need to use temperature.
+   */
+  topK?: number;
+
+  /**
+   * Presence penalty setting.
+   * It affects the likelihood of the model to repeat information that is already in the prompt.
+   * The value is passed through to the provider. The range depends on the provider and model.
+   */
+  presencePenalty?: number;
+
+  /**
+   * Frequency penalty setting.
+   * It affects the likelihood of the model to repeatedly use the same words or phrases.
+   * The value is passed through to the provider. The range depends on the provider and model.
+   */
+  frequencyPenalty?: number;
+
+  /**
+   * Stop sequences.
+   * If set, the model will stop generating text when one of the stop sequences is generated.
+   */
+  stopSequences?: string[];
+
+  /**
+   * The seed (integer) to use for random sampling.
+   * If set and supported by the model, calls will generate deterministic results.
+   */
+  seed?: number;
+
+  /**
+   * Maximum number of retries. Set to 0 to disable retries. Default: 2.
+   */
+  maxRetries?: number;
+
+  /**
+   * An optional abort signal that can be used to cancel the call.
+   */
+  abortSignal?: AbortSignal;
+
+  /**
+   * Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Condition for stopping the generation when there are tool results in the last step.
+   * When the condition is an array, any of the conditions can be met to stop the generation.
+   *
+   * @default stepCountIs(1)
+   */
+  stopWhen?:
+    | StopCondition<NoInfer<TOOLS>>
+    | Array<StopCondition<NoInfer<TOOLS>>>;
+
+  /**
+   * Optional telemetry configuration (experimental).
+   */
+  experimental_telemetry?: TelemetrySettings;
+
+  /**
+   * Additional provider-specific options. They are passed through
+   * to the provider from the AI SDK and enable provider-specific
+   * functionality that can be fully encapsulated in the provider.
+   */
+  providerOptions?: ProviderOptions;
+
+  /**
+   * @deprecated Use `activeTools` instead.
+   */
+  experimental_activeTools?: Array<keyof NoInfer<TOOLS>>;
+
+  /**
+   * Limits the tools that are available for the model to call without
+   * changing the tool call and result types in the result.
+   */
+  activeTools?: Array<keyof NoInfer<TOOLS>>;
+
+  /**
+   * Optional specification for parsing structured outputs from the LLM response.
+   */
+  experimental_output?: Output.Output<OUTPUT, OUTPUT_PARTIAL>;
+
+  /**
+   * @deprecated Use `prepareStep` instead.
+   */
+  experimental_prepareStep?: PrepareStepFunction<NoInfer<TOOLS>>;
+
+  /**
+   * Optional function that you can use to provide different settings for a step.
+   */
+  prepareStep?: PrepareStepFunction<NoInfer<TOOLS>>;
+
+  /**
+   * A function that attempts to repair a tool call that failed to parse.
+   */
+  experimental_repairToolCall?: ToolCallRepairFunction<NoInfer<TOOLS>>;
+
+  /**
+   * Callback that is called when each step (LLM call) is finished, including intermediate steps.
+   */
+  onStepFinish?: GenerateTextOnStepFinishCallback<NoInfer<TOOLS>>;
+
+  /**
+   * Context that is passed into tool execution.
+   *
+   * Experimental (can break in patch releases).
+   *
+   * @default undefined
+   */
+  experimental_context?: unknown;
+
+  /**
+   * Generate a unique ID for each message.
+   */
+  experimental_generateMessageId?: boolean;
+
+  /**
+   * Internal. For test use only. May change without notice.
+   */
+  _internal?: {
+    generateId?: IdGenerator;
+    currentDate?: () => Date;
+  };
 }
 
 export interface GenerateObjectArgs<OBJECT> extends GenerateTextArgs {
@@ -212,7 +362,7 @@ export interface GenerateObjectArgs<OBJECT> extends GenerateTextArgs {
   /**
   The schema of the object that the model should generate.
    */
-  schema: z.Schema<OBJECT, z.ZodTypeDef, any> | Schema<OBJECT>;
+  schema: z.Schema<OBJECT> | Schema<OBJECT>;
   /**
   Optional name of the output that should be generated.
   Used by some providers for additional LLM guidance, e.g.
@@ -240,7 +390,6 @@ export interface GenerateObjectArgs<OBJECT> extends GenerateTextArgs {
    */
   mode?: "auto" | "json" | "tool";
 }
-
 export interface MCPAutoConfig {
   type: "auto";
 
@@ -302,11 +451,7 @@ export interface AIAgentInterface {
     object: OBJECT;
     textGenerationResult: GenerateTextResult<TOOLS, any>;
     objectGenerationResult: GenerateObjectResult<OBJECT>;
-    usage: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-    };
+    usage: LanguageModelUsage;
   }>;
 
   /**
@@ -378,7 +523,7 @@ export interface AgentConfig {
    * A list of messages
    * You can either use `prompt` or `messages` but not both
    */
-  messages?: Array<CoreMessage> | Array<Omit<Message, "id">>;
+  messages?: Array<Omit<ModelMessage, "id">>;
 
   /**
    * Provider-specific options
@@ -395,7 +540,7 @@ export interface AgentConfig {
    * @param tool The tool to evaluate
    * @returns Boolean indicating whether to include the tool
    */
-  filterMCPTools?: (tool: TOOLS) => boolean;
+  filterMCPTools?: (tool: TOOLS[string]) => boolean;
 }
 
 type ToolParameters = z.ZodTypeAny | Schema<any>;

@@ -142,7 +142,7 @@ describe("Automated Project E2E", () => {
       })
     ),
     workload_distribution: z
-      .record(z.number())
+      .record(z.string(), z.number())
       .describe("Hours allocated to each team member"),
   });
 
