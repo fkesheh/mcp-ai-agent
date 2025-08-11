@@ -1,6 +1,6 @@
 # MCP AI Agent
 
-A TypeScript library that enables AI agents to leverage MCP (Model Context Protocol) servers for enhanced capabilities. This library integrates with the AI SDK to provide a seamless way to connect to MCP servers and use their tools in AI-powered applications.
+A TypeScript library that enables AI agents to leverage MCP (Model Context Protocol) servers for enhanced capabilities. This library integrates with the AI SDK v5 to provide a seamless way to connect to MCP servers and use their tools in AI-powered applications.
 
 ## Features
 
@@ -559,7 +559,7 @@ const response = await agent.generateResponse({
           type: "file",
           data: fs.readFileSync("./path/to/equation.pdf"),
           filename: "equation.pdf",
-          mimeType: "application/pdf",
+          mediaType: "application/pdf",
         },
       ],
     },
@@ -684,7 +684,7 @@ const response = await agent.generateResponse({
           type: "file",
           data: fs.readFileSync("./path/to/document.pdf"),
           filename: "document.pdf",
-          mimeType: "application/pdf",
+          mediaType: "application/pdf",
         },
       ],
     },
@@ -849,49 +849,110 @@ The following types are used throughout the API:
 /**
  * Arguments for generating text using an AI model
  */
-interface GenerateTextArgs {
+interface GenerateTextArgs<
+  TOOLS extends ToolSet = any,
+  OUTPUT = never,
+  OUTPUT_PARTIAL = never
+> {
   /**
-   * Language model to use
+   * The language model to use
    */
   model?: LanguageModel;
 
   /**
-   * Tools to make available to the model
+   * The tools that the model can call
    */
   tools?: TOOLS;
 
   /**
-   * Tool selection configuration
+   * The tool choice strategy. Default: 'auto'
    */
   toolChoice?: ToolChoice<TOOLS>;
 
   /**
-   * Maximum number of steps to execute
+   * Maximum number of steps to take
    */
   maxSteps?: number;
 
   /**
-   * System message to include in the prompt
-   * Can be used with `prompt` or `messages`
+   * A system message that will be part of the prompt
    */
   system?: string;
 
   /**
-   * A simple text prompt
-   * You can either use `prompt` or `messages` but not both
+   * A simple text prompt. You can either use `prompt` or `messages` but not both
    */
-  prompt?: string;
+  prompt?: string | Array<ModelMessage>;
 
   /**
-   * A list of messages
-   * You can either use `prompt` or `messages` but not both
+   * A list of messages. You can either use `prompt` or `messages` but not both
    */
-  messages?: Array<CoreMessage> | Array<Omit<Message, "id">>;
+  messages?: Array<ModelMessage>;
 
   /**
-   * Provider-specific options
+   * Maximum number of tokens to generate
    */
-  providerOptions?: ProviderMetadata;
+  maxOutputTokens?: number;
+
+  /**
+   * Temperature setting for randomness
+   */
+  temperature?: number;
+
+  /**
+   * Nucleus sampling parameter
+   */
+  topP?: number;
+
+  /**
+   * Top-K sampling parameter
+   */
+  topK?: number;
+
+  /**
+   * Presence penalty setting
+   */
+  presencePenalty?: number;
+
+  /**
+   * Frequency penalty setting
+   */
+  frequencyPenalty?: number;
+
+  /**
+   * Stop sequences
+   */
+  stopSequences?: string[];
+
+  /**
+   * Seed for deterministic results
+   */
+  seed?: number;
+
+  /**
+   * Maximum number of retries
+   */
+  maxRetries?: number;
+
+  /**
+   * Abort signal for cancellation
+   */
+  abortSignal?: AbortSignal;
+
+  /**
+   * Additional HTTP headers
+   */
+  headers?: Record<string, string>;
+
+  /**
+   * Stop conditions for multi-step generation
+   */
+  stopWhen?: StopCondition<TOOLS> | Array<StopCondition<TOOLS>>;
+
+  /**
+   * Additional provider-specific options
+   */
+  providerOptions?: ProviderOptions;
 
   /**
    * Callback function that is called when a step finishes
@@ -903,7 +964,7 @@ interface GenerateTextArgs {
    * @param tool The tool to evaluate
    * @returns Boolean indicating whether to include the tool
    */
-  filterMCPTools?: (tool: TOOLS) => boolean;
+  filterMCPTools?: (tool: TOOLS[string]) => boolean;
 }
 
 /**
@@ -944,12 +1005,12 @@ interface MCPTool {
 type ToolSet = Record<string, MCPTool>;
 
 /**
- * Generic type for tool configurations
+ * Generic type for tool configurations (AI SDK ToolSet)
  */
-type TOOLS = Record<string, any>;
+type TOOLS = AiToolSet;
 
 /**
- * AI response type to handle OpenAI API responses
+ * AI response type to handle AI SDK responses
  */
 type MCPResponse = GenerateTextResult<any, any>;
 ```
