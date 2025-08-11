@@ -113,6 +113,7 @@ describe("Agent E2E", () => {
     calculatorAgent = new AIAgent({
       name: "Calculator Agent",
       description: "A calculator agent",
+      model: modelForTest,
       toolsConfigs: [
         {
           type: "tool",

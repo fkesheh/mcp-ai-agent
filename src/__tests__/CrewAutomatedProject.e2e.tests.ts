@@ -1,6 +1,5 @@
-import { AIAgent, CrewStyleHelpers, Servers } from "../index.js";
+import { AIAgent, CrewStyleHelpers } from "../index.js";
 import { openai } from "@ai-sdk/openai";
-import { AIAgentInterface } from "../types.js";
 import { z } from "zod";
 import assert from "assert";
 
