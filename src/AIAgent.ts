@@ -159,7 +159,7 @@ export class AIAgent implements AIAgentInterface {
         context: z
           .string()
           .describe(
-            "The context to send to the agent. Add any relevant information the agent needs to know for the task."
+            "The context to send to the agent. Add any relevant information the agent needs to know for the task. It doesn't know anything about the current state of the system, or previous steps, messages, or anything else. It only knows what you tell it here."
           ),
         prompt: z.string().describe("The prompt to send to the agent"),
       }),
