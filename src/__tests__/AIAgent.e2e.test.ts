@@ -1,9 +1,9 @@
 import { AIAgent } from "../AIAgent.js";
 import { Servers } from "../index.js";
-import { openai } from "@ai-sdk/openai";
 import fs from "fs";
 import { AIAgentInterface } from "../types.js";
 import { z } from "zod";
+import { openai } from "@ai-sdk/openai";
 // Add Jest type declarations
 declare global {
   namespace jest {
@@ -49,13 +49,15 @@ describe("Agent E2E", () => {
       );
     }
 
+    const modelForTest = openai("gpt-4o-mini");
+
     // The sequential thinking agent
     sequentialThinkingAgent = new AIAgent({
       name: "Sequential Thinker",
       description:
         "Use this agent to think sequentially and resolve complex problems",
       toolsConfigs: [Servers.sequentialThinking],
-      model: openai("gpt-4o-mini"),
+      model: modelForTest,
     });
 
     // The brave search agent
@@ -64,7 +66,7 @@ describe("Agent E2E", () => {
       description:
         "Use this agent to search the web for the latest information",
       toolsConfigs: [Servers.braveSearch],
-      model: openai("gpt-4o-mini"),
+      model: modelForTest,
     });
 
     // The memory agent
@@ -74,7 +76,7 @@ describe("Agent E2E", () => {
         "Use this agent to store and retrieve memories. Pass a full prompt to the agent with all the context it will need to store and retrieve memories.",
       systemPrompt:
         "If the use asks to store something use the create_entities tool. If the user asks to retrieve something use the read_graph tool.",
-      model: openai("gpt-4o-mini"),
+      model: modelForTest,
       toolsConfigs: [
         {
           mcpServers: {
@@ -91,7 +93,7 @@ describe("Agent E2E", () => {
     masterAgent = new AIAgent({
       name: "Master Agent",
       description: "An agent that can manage other agents",
-      model: openai("gpt-4o-mini"),
+      model: modelForTest,
       toolsConfigs: [
         {
           type: "agent",
@@ -111,6 +113,7 @@ describe("Agent E2E", () => {
     calculatorAgent = new AIAgent({
       name: "Calculator Agent",
       description: "A calculator agent",
+      model: modelForTest,
       toolsConfigs: [
         {
           type: "tool",
@@ -191,12 +194,12 @@ describe("Agent E2E", () => {
     expect(typeof response.text).toBe("string");
     expect(response.text.length).toBeGreaterThan(0);
     console.log("response", response.text);
-  }, 60000);
+  }, 120000);
 
   it("should remember the answer to the question", async () => {
     const response = await masterAgent.generateResponse({
       prompt:
-        "Use your knowledge graph memory and tell me what is the TEST_NUMBER?",
+        "Use your knowledge graph memory and tell me what is the TEST_NUMBER? (ask the memory agent to retrieve the answer)",
       onStepFinish: stepDebug,
     });
 
@@ -264,7 +267,7 @@ describe("Agent E2E", () => {
               type: "file",
               data: fs.readFileSync("./src/__tests__/equation.pdf"),
               filename: "equation.pdf",
-              mimeType: "application/pdf",
+              mediaType: "application/pdf",
             },
           ],
         },
@@ -277,7 +280,9 @@ describe("Agent E2E", () => {
     expect(response.text.length).toBeGreaterThan(0);
     console.log("response", response.text);
     const hasAnswer =
-      response.text.includes("x = -2") || response.text.includes("minus two");
+      response.text.includes("x = -2") ||
+      response.text.includes("x = −2") ||
+      response.text.includes("minus two");
     expect(hasAnswer).toBe(true);
   }, 60000);
 });

@@ -5,6 +5,7 @@ import {
   generateText,
   GenerateTextResult,
   LanguageModel,
+  LanguageModelUsage,
   Schema,
   tool,
 } from "ai";
@@ -27,9 +28,7 @@ import {
 import { z, ZodType } from "zod";
 import { filterTools } from "./utils.js";
 import { DEFAULT_MAX_STEPS, DEFAULT_MODEL } from "./const.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { toSnakeCase } from "./utils/textUtils.js";
-import { openai } from "@ai-sdk/openai";
 
 export class AIAgent implements AIAgentInterface {
   private clients: Record<string, any> = {};
@@ -156,21 +155,16 @@ export class AIAgent implements AIAgentInterface {
         config.description ||
         config.agent.getInfo?.()?.description ||
         `Call the ${config.name} agent for specialized tasks`,
-      parameters: z.object({
+      inputSchema: z.object({
         context: z
           .string()
           .describe(
-            "The context to send to the agent. Add any relevant information the agent needs to know for the task."
+            "The context to send to the agent. Add any relevant information the agent needs to know for the task. It doesn't know anything about the current state of the system, or previous steps, messages, or anything else. It only knows what you tell it here."
           ),
         prompt: z.string().describe("The prompt to send to the agent"),
       }),
-      execute: async ({
-        context,
-        prompt,
-      }: {
-        context: string;
-        prompt: string;
-      }) => {
+      outputSchema: z.string(),
+      execute: async ({ context, prompt }) => {
         const response = await config.agent.generateResponse({
           model: config.model || config.agent.getInfo?.()?.model || this.model,
           prompt: `<Context>${context}</Context>\n<Prompt>${prompt}</Prompt>`,
@@ -239,7 +233,8 @@ export class AIAgent implements AIAgentInterface {
       this.log("info", "Config Router: Initializing tool", config.name);
       this.tools[toSnakeCase(config.name)] = tool({
         description: config.description,
-        parameters: config.parameters,
+        inputSchema: config.parameters,
+        outputSchema: z.string(),
         execute: config.execute,
       });
     } else {
@@ -286,7 +281,7 @@ export class AIAgent implements AIAgentInterface {
         {
           name: this.name,
           prompt: args.prompt,
-          model: model.modelId,
+          model: model,
           allTools: Object.keys(allTools),
           maxSteps: args.maxSteps,
         },
@@ -296,19 +291,24 @@ export class AIAgent implements AIAgentInterface {
     );
 
     try {
+      console.log("args", args);
       const response = await generateText({
         ...args,
         system: args.system || this.system,
         model,
         tools: allTools,
-        maxSteps: args.maxSteps || DEFAULT_MAX_STEPS,
+        stopWhen: args.stopWhen || [
+          ({ steps }) => steps.length >= (args.maxSteps || DEFAULT_MAX_STEPS),
+        ],
       });
 
-      const finalResponse = { ...response };
+      let finalResponse = response;
 
       if (!response.text && response.finishReason === "tool-calls") {
-        finalResponse.text =
-          "The AI completed with tool calls, but no final text was generated. Check if the requested resources were found.";
+        finalResponse = {
+          ...response,
+          text: "The AI completed with tool calls, but no final text was generated. Check if the requested resources were found.",
+        };
       }
 
       return finalResponse;
@@ -326,11 +326,7 @@ export class AIAgent implements AIAgentInterface {
     object: OBJECT;
     textGenerationResult: GenerateTextResult<TOOLS, any>;
     objectGenerationResult: GenerateObjectResult<OBJECT>;
-    usage: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-    };
+    usage: LanguageModelUsage;
   }> {
     const filteredTools = filterTools(this.tools, args.filterMCPTools);
     const allTools = { ...filteredTools, ...args.tools };
@@ -341,7 +337,7 @@ export class AIAgent implements AIAgentInterface {
     if (typeof args.schema === "object" && "jsonSchema" in args.schema) {
       schemaJson = (args.schema as Schema<OBJECT>).jsonSchema;
     } else {
-      schemaJson = zodToJsonSchema(args.schema as ZodType<OBJECT>);
+      schemaJson = z.toJSONSchema(args.schema as ZodType<OBJECT>);
     }
 
     const textResponse = await this.generateResponse({
@@ -364,22 +360,19 @@ export class AIAgent implements AIAgentInterface {
       model,
     });
 
-    response.usage.completionTokens += textResponse.usage.completionTokens;
-    response.usage.promptTokens += textResponse.usage.promptTokens;
-    response.usage.totalTokens += textResponse.usage.totalTokens;
+    for (const key of Object.keys(
+      textResponse.usage
+    ) as (keyof typeof textResponse.usage)[]) {
+      if (textResponse.usage[key] && response.usage[key]) {
+        (response.usage as any)[key] += textResponse.usage[key] || 0;
+      }
+    }
 
     return {
       object: response.object,
       textGenerationResult: textResponse,
       objectGenerationResult: response,
-      usage: {
-        promptTokens:
-          textResponse.usage.promptTokens + response.usage.promptTokens,
-        completionTokens:
-          textResponse.usage.completionTokens + response.usage.completionTokens,
-        totalTokens:
-          textResponse.usage.totalTokens + response.usage.totalTokens,
-      },
+      usage: textResponse.usage,
     };
   }
 

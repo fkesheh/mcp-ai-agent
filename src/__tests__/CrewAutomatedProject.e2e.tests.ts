@@ -1,6 +1,5 @@
-import { AIAgent, CrewStyleHelpers, Servers } from "../index.js";
+import { AIAgent, CrewStyleHelpers } from "../index.js";
 import { openai } from "@ai-sdk/openai";
-import { AIAgentInterface } from "../types.js";
 import { z } from "zod";
 import assert from "assert";
 
@@ -142,8 +141,10 @@ describe("Automated Project E2E", () => {
       })
     ),
     workload_distribution: z
-      .record(z.number())
-      .describe("Hours allocated to each team member"),
+      .record(z.string(), z.number())
+      .describe(
+        "Total hours allocated to each team member as numbers (not percentages)"
+      ),
   });
 
   it("should execute the project planning workflow", async () => {
