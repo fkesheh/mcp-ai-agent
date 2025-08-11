@@ -23,10 +23,12 @@
   "author": "Foad Kesheh <foad@fmktech.com.br>",
   "license": "MIT",
   "dependencies": {
-    "@ai-sdk/anthropic": "^2.0.1",
-    "@ai-sdk/openai": "^2.0.8",
     "ai": "^5.0.9",
     "zod": "^4.0.17"
+  },
+  "peerDependencies": {
+    "@ai-sdk/anthropic": "^2.0.1",
+    "@ai-sdk/openai": "^2.0.9"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",

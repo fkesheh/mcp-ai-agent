@@ -201,12 +201,12 @@ export interface GenerateTextArgs<
   /**
    * A simple text prompt. You can either use `prompt` or `messages` but not both.
    */
-  prompt?: string;
+  prompt?: string | Array<ModelMessage>;
 
   /**
    * A list of messages. You can either use `prompt` or `messages` but not both.
    */
-  messages?: any[];
+  messages?: Array<ModelMessage>;
 
   /**
    * Maximum number of tokens to generate.
@@ -523,7 +523,7 @@ export interface AgentConfig {
    * A list of messages
    * You can either use `prompt` or `messages` but not both
    */
-  messages?: Array<Omit<ModelMessage, "id">>;
+  messages?: ModelMessage[];
 
   /**
    * Provider-specific options
